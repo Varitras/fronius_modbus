@@ -6,7 +6,57 @@ import pathlib
 from modbus_connection.mock import MockModbusConnection
 import pytest
 
+from .durations import SLOW_TEST_SECONDS, over_budget
+
 pytest_plugins = ("pytest_homeassistant_custom_component",)
+
+# Summed per test across setup, call and teardown, and read at the end of the
+# session. A dict at module level because that is what a pytest hook has: the
+# hooks are functions, not a fixture with somewhere to keep state.
+_durations: dict = {}
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--slow-test-seconds",
+        type=float,
+        default=SLOW_TEST_SECONDS,
+        help=(
+            "fail the session if a single test takes longer than this "
+            "(0 makes every test late, which is how the check is tested)"
+        ),
+    )
+
+
+def pytest_runtest_logreport(report):
+    """Add up what one test costs, fixtures included."""
+    _durations[report.nodeid] = _durations.get(report.nodeid, 0.0) + report.duration
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Turn a green run red when a test ran far longer than it should.
+
+    Only a green one: a failing suite has more urgent news, and a test that is
+    slow *because* it failed is not the subject here.
+    """
+    if exitstatus != pytest.ExitCode.OK:
+        return
+
+    late = over_budget(_durations, session.config.getoption("--slow-test-seconds"))
+    if not late:
+        return
+
+    listed = "\n  ".join(f"{seconds:7.2f}s {node_id}" for node_id, seconds in late)
+    print(
+        f"\nSLOWER THAN THE BUDGET ALLOWS:\n  {listed}\n\n"
+        "A test in the minutes is nearly always a wait that was meant to be "
+        "shortened and no longer is - check what the test patches against "
+        "where the production code now reads it. If the time is genuinely "
+        "warranted, raise SLOW_TEST_SECONDS in tests/durations.py and say "
+        "in the commit why."
+    )
+    session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
 
 FIXTURES = pathlib.Path(__file__).with_name("fixtures")
 INVERTER_UNIT_ID = 1

@@ -260,6 +260,18 @@ split-on-trailing-comma = false
 # ast.NodeVisitor dispatches on `visit_<NodeName>`; the aliases have to be mixedCase.
 "tests/complexity.py" = ["N815"]
 
+# The modules carried over from 0.3 untouched. Their findings were in the tree
+# when `ruff check .` became a gate and are frozen per file rather than
+# silenced everywhere: the same modules are the ones tests/test_mypy_scope.py
+# lists as not type-checked yet, and both lists empty together when a module
+# is finally reworked. Rewriting them to satisfy the linter now would be a
+# large untested diff in the code the rewrite has not reached.
+"custom_components/fronius_modbus/froniuswebclient.py" = ["D100", "D101", "D102", "D103", "D107", "I001", "UP033", "B018"]
+"custom_components/fronius_modbus/token_store.py" = ["D100", "D101", "D102", "D103", "D107", "F401"]
+"custom_components/fronius_modbus/config_flow.py" = ["D100", "D101", "D102", "D103", "D107", "I001", "UP035", "TRY301", "LOG004"]
+"custom_components/fronius_modbus/migrations.py" = ["D100", "D103", "I001"]
+"custom_components/fronius_modbus/repairs.py" = ["D100", "D102", "D107", "I001"]
+
 [tool.ruff.lint.mccabe]
 max-complexity = 25
 
@@ -269,11 +281,20 @@ property-decorators = ["propcache.api.cached_property"]
 [tool.mypy]
 python_version = "3.14"
 # The type-check scope. Frozen at the modules that were clean when the gate
-# was adopted; the nine that were not are listed with their error count in
+# was adopted; the rest are listed with their reason in
 # tests/test_mypy_scope.py, and widening this list is how that list empties.
 # A module in neither place fails that guard - leaving one out is a decision
 # somebody writes down, not something that happens.
-files = ["custom_components/fronius_modbus/fronius_modbus_api"]
+files = [
+  "custom_components/fronius_modbus/fronius_modbus_api/__init__.py",
+  "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
+  "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+  "custom_components/fronius_modbus/fronius_modbus_api/exceptions.py",
+  "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+  "custom_components/fronius_modbus/fronius_modbus_api/sunspec_models.py",
+  "custom_components/fronius_modbus/const.py",
+  "custom_components/fronius_modbus/derived.py",
+]
 
 # Path tracking rules
 mypy_path = "/usr/src/homeassistant"
