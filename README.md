@@ -26,7 +26,7 @@ It can use the authenticated Fronius web API for setup assistance and battery co
 - New option: **"Web API update interval (seconds)"** (default 60), separate from the Modbus poll interval.
 - Diagnostics download (Settings -> Devices -> device -> Download diagnostics) now includes the raw SunSpec register map, with serial numbers redacted.
 - If a firmware update changes the inverter's SunSpec model chain, the integration reloads the config entry automatically.
-- Entity IDs, unique IDs, history/statistics, and existing options are unaffected by this change; storage modes, the AC-limit/power-factor enable pulse, and the battery API controls behave the same as before.
+- Entity IDs, unique IDs, history/statistics, and existing options are unaffected by this change; storage modes, the AC-limit/power-factor enable pulse, and the battery API controls behave the same as before, with one correction: the grid charge/discharge power entities now scale by their own rate maximum (0.3 wrote them against the opposite one).
 
 # Installation
 
@@ -209,4 +209,4 @@ Development happens against a WSL2 Home Assistant test environment; the integrat
 
 - `.github/scripts/check.sh` runs every gate CI also runs: ruff, mypy, pytest with a coverage gate, and a mutation run. Run it (or at least `pytest tests/ -q`) before calling a change done.
 - The default `pytest tests/ -q` run skips the end-to-end tests. Pass `-m ""` to include them.
-- `tests/fixtures/symo_gen24_fw1386.json` is a captured SunSpec register map from a Fronius Symo GEN24 10.0 running firmware 1.38.6-1. To capture a fixture from another inverter/firmware combination: download diagnostics for the integration's device (Settings -> Devices -> device -> Download diagnostics), take the `registers` array, prepend the SunSpec marker registers (40000/40001, `"SunS"`) and append the end-of-chain header (a model id of `0xFFFF`) if the diagnostics dump doesn't already include them, and blank out the serial number words before committing the fixture.
+- `tests/fixtures/symo_gen24_fw1386.json` is a captured SunSpec register map from a Fronius Symo GEN24 10.0 running firmware 1.38.6-1. To capture a fixture from another inverter/firmware combination: download diagnostics for the integration's device (Settings -> Devices -> device -> Download diagnostics), take the `registers` object (`{unit_id: {space: {address: word}}}`), prepend the SunSpec marker registers (40000/40001, `"SunS"`) and append the end-of-chain header (a model id of `0xFFFF`) if the diagnostics dump doesn't already include them, and blank out the serial number words before committing the fixture.

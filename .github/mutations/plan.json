@@ -82,5 +82,12 @@
     "old": "TOTAL_INCREASING_MAX_STEP_WH = 100_000",
     "new": "TOTAL_INCREASING_MAX_STEP_WH = 10**12",
     "tests": "total_sensor_ignores_an_implausible_jump"
+  },
+  {
+    "label": "web control: manual mode restores the Modbus reserve, not the web one",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            soc_min = self.data.soc_min if modbus_reserve is None else modbus_reserve",
+    "new": "            soc_min = self.data.soc_min",
+    "tests": "switching_back_to_manual_keeps_the_modbus_reserve"
   }
 ]

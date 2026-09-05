@@ -345,9 +345,7 @@ async def test_diagnostics_redact_the_serial_numbers(hass, mock_modbus):
 MPPT_REGISTER_ADDRESS = 40260
 
 
-async def test_a_failed_mppt_read_at_startup_keeps_the_mppt_entities(
-    hass, mock_modbus
-):
+async def test_a_failed_mppt_read_at_startup_keeps_the_mppt_entities(hass, mock_modbus):
     """A sub-system that is silent on the first poll must not cost the user its history.
 
     The MPPT descriptions are built from the values the first poll returned, so a

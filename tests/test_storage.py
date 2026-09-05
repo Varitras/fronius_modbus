@@ -124,3 +124,37 @@ async def test_blocking_discharge_still_allows_a_charge_limit(control, writes):
     await control.set_charge_limit_w(5120)
 
     assert _words(writes, IN_W_RTE)[-1] == 5000
+
+
+CHA_GRI_SET = STORAGE_HEADER + 17
+
+
+async def test_a_negative_discharge_rate_reads_as_charging(inverter_unit):
+    """The sensor names what the battery is doing, not which register was written.
+
+    A negative discharge rate is how charging from the grid is expressed; showing
+    the raw mode there would say "Discharge" while the battery fills.
+    """
+    inverter_unit.holding[OUT_W_RTE] = -3000 & 0xFFFF
+    chain = await scan(inverter_unit, 40000)
+    storage = Storage(inverter_unit, chain.first(STORAGE_MODEL_ID))
+    await storage.async_update()
+    control = StorageControl(
+        storage, max_charge_rate_w=10240, max_discharge_rate_w=10240
+    )
+    control.sync_from_device()
+
+    assert control.control_mode == 1
+
+
+async def test_charging_from_the_grid_reads_as_charging(control, inverter_unit):
+    inverter_unit.holding[CHA_GRI_SET] = 1
+    await control.set_mode(ExtendedMode.CHARGE_FROM_GRID)
+
+    assert control.control_mode == 1
+
+
+async def test_discharging_to_the_grid_reads_as_discharging(control):
+    await control.set_mode(ExtendedMode.DISCHARGE_TO_GRID)
+
+    assert control.control_mode == 2

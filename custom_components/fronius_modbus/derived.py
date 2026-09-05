@@ -79,7 +79,10 @@ class LoadEstimator:
             or meter_location in METER_LOCATION_CONSUMPTION_RANGE
         ):
             load = -meter_power_w
-            return self._good(load) if meter_power_w <= 0 else round(load, 2)
+            if meter_power_w <= 0:
+                return self._good(load)
+            self._consecutive_bad_polls = 0
+            return round(load, 2)
         if meter_location != METER_LOCATION_FEED_IN or inverter_power_w is None:
             self._consecutive_bad_polls = 0
             return None

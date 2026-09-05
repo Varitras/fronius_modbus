@@ -100,16 +100,3 @@ def test_no_promise_outlives_its_module():
     ghosts = set(NOT_TYPE_CHECKED_YET) - _modules_in_the_package()
 
     assert not ghosts, f"{sorted(ghosts)} no longer exist; drop the entries."
-
-
-def test_the_scan_would_notice_a_module_nobody_decided_about():
-    """The shape it exists to catch, fed directly: a new module in the package
-    that neither list mentions. Spelled out rather than created on disk, because
-    writing into the package during a test run is a side effect a suite should
-    not have."""
-    package = {"items.py", "brand_new.py"}
-    scope = {"items.py"}
-    declared = set()
-
-    assert package - scope - declared == {"brand_new.py"}
-    assert package - scope - {"brand_new.py"} == set()

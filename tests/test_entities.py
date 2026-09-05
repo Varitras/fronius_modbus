@@ -68,6 +68,7 @@ def _report(sensor, value) -> None:
         sensor.entity_description, value_fn=lambda r: value
     )
 
+
 async def test_sensor_descriptions_carry_the_polled_values(runtime):
     descriptions = entities.sensor_descriptions(runtime)
     assert _description(descriptions, "acpower").value_fn(runtime) == 3075.1

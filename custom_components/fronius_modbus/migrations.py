@@ -120,10 +120,6 @@ def _updated_entry_title(entry: ConfigEntry) -> str:
     return f"{name} {host}" if host else name
 
 
-def _load_translation_data(language: str) -> dict:
-    return _TRANSLATION_CACHE.get(language, {})
-
-
 def _read_translation_data(path: Path) -> dict:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
