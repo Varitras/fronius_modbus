@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from modbus_connection import ModbusError
-
 from homeassistant.components.select import SelectEntity
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import FroniusConfigEntry
@@ -31,12 +29,9 @@ class FroniusSelect(FroniusEntity, SelectEntity):
             raise ServiceValidationError(
                 f"Unsupported option for {self.entity_description.key}: {option}"
             )
-        try:
-            await self.entity_description.set_fn(self._runtime, code)
-        except ValueError as err:
-            raise ServiceValidationError(str(err)) from err
-        except (ModbusError, RuntimeError) as err:
-            raise HomeAssistantError(str(err)) from err
+        await self.async_run_write(
+            lambda: self.entity_description.set_fn(self._runtime, code)
+        )
         if self.entity_description.source == "modbus":
             await self._runtime.modbus.async_request_refresh()
 

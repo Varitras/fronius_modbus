@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-from modbus_connection import ModbusError
-
 from homeassistant.components.number import NumberEntity
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import FroniusConfigEntry
@@ -31,12 +28,9 @@ class FroniusNumber(FroniusEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Write the value through the description's set_fn, then request a refresh."""
-        try:
-            await self.entity_description.set_fn(self._runtime, value)
-        except ValueError as err:
-            raise ServiceValidationError(str(err)) from err
-        except (ModbusError, RuntimeError) as err:
-            raise HomeAssistantError(str(err)) from err
+        await self.async_run_write(
+            lambda: self.entity_description.set_fn(self._runtime, value)
+        )
         if self.entity_description.source == "modbus":
             await self._runtime.modbus.async_request_refresh()
 

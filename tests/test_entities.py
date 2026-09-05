@@ -97,3 +97,48 @@ async def test_a_total_sensor_keeps_its_value_when_a_poll_reports_none(
     # reports no value, the same way a real Modbus timeout on "wh" alone would.
     object.__setattr__(description, "value_fn", lambda r: None)
     assert sensor.native_value == 33187794.59
+
+
+def _reset_acenergy_value_fn(description) -> None:
+    """Descriptions are shared, frozen dataclass instances -- other tests mutate
+    ``value_fn`` in place via object.__setattr__, so restore the polled baseline
+    before asserting against it."""
+    object.__setattr__(description, "value_fn", lambda r: 33187794.59)
+
+
+async def test_a_total_sensor_ignores_a_lower_value(hass, entry, runtime):
+    description = _description(entities.sensor_descriptions(runtime), "acenergy")
+    _reset_acenergy_value_fn(description)
+    sensor = entities.FroniusTotalSensor(runtime, entry, description)
+    sensor.hass = hass
+
+    assert sensor.native_value == 33187794.59
+
+    object.__setattr__(description, "value_fn", lambda r: 33187794.58)
+    assert sensor.native_value == 33187794.59
+
+
+async def test_a_total_sensor_ignores_an_implausible_jump(hass, entry, runtime):
+    description = _description(entities.sensor_descriptions(runtime), "acenergy")
+    _reset_acenergy_value_fn(description)
+    sensor = entities.FroniusTotalSensor(runtime, entry, description)
+    sensor.hass = hass
+
+    assert sensor.native_value == 33187794.59
+
+    too_high = 33187794.59 + entities.TOTAL_INCREASING_MAX_STEP_WH + 1
+    object.__setattr__(description, "value_fn", lambda r: too_high)
+    assert sensor.native_value == 33187794.59
+
+
+async def test_a_total_sensor_accepts_a_plausible_higher_value(hass, entry, runtime):
+    description = _description(entities.sensor_descriptions(runtime), "acenergy")
+    _reset_acenergy_value_fn(description)
+    sensor = entities.FroniusTotalSensor(runtime, entry, description)
+    sensor.hass = hass
+
+    assert sensor.native_value == 33187794.59
+
+    higher = 33187794.59 + entities.TOTAL_INCREASING_MAX_STEP_WH - 1
+    object.__setattr__(description, "value_fn", lambda r: higher)
+    assert sensor.native_value == higher

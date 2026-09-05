@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-from modbus_connection import ModbusError
-
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import FroniusConfigEntry
@@ -36,12 +33,7 @@ class FroniusSwitch(FroniusEntity, SwitchEntity):
         await self._async_write(self.entity_description.turn_off)
 
     async def _async_write(self, action) -> None:
-        try:
-            await action(self._runtime)
-        except ValueError as err:
-            raise ServiceValidationError(str(err)) from err
-        except (ModbusError, RuntimeError) as err:
-            raise HomeAssistantError(str(err)) from err
+        await self.async_run_write(lambda: action(self._runtime))
         if self.entity_description.source == "modbus":
             await self._runtime.modbus.async_request_refresh()
         elif self.entity_description.key == _IMMEDIATE_REFRESH_KEY:

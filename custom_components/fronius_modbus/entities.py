@@ -27,6 +27,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.components.switch import SwitchEntityDescription
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -171,6 +172,12 @@ def _web_configured(runtime: FroniusRuntimeData) -> bool:
 
 def _controls_present(runtime: FroniusRuntimeData) -> bool:
     return runtime.inverter_controls is not None
+
+
+def _controls_value(runtime: FroniusRuntimeData, getter: Callable[[Any], Any]) -> Any:
+    """Read a value off inverter_controls, or None while it hasn't loaded yet."""
+    controls = runtime.inverter_controls
+    return None if controls is None else getter(controls)
 
 
 # -- sensor table --------------------------------------------------------------
@@ -367,28 +374,38 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "Conn",
         "Conn",
         report_name=REPORT_CONTROLS,
-        value_fn=lambda r: _control_status(r.inverter_controls.connected),
+        value_fn=lambda r: _controls_value(r, lambda c: _control_status(c.connected)),
+        exists_fn=_controls_present,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     _sensor(
         "WMaxLim_Ena",
         "WMaxLim_Ena",
         report_name=REPORT_CONTROLS,
-        value_fn=lambda r: _control_status(r.inverter_controls.ac_limit_enabled),
+        value_fn=lambda r: _controls_value(
+            r, lambda c: _control_status(c.ac_limit_enabled)
+        ),
+        exists_fn=_controls_present,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     _sensor(
         "OutPFSet_Ena",
         "OutPFSet_Ena",
         report_name=REPORT_CONTROLS,
-        value_fn=lambda r: _control_status(r.inverter_controls.power_factor_enabled),
+        value_fn=lambda r: _controls_value(
+            r, lambda c: _control_status(c.power_factor_enabled)
+        ),
+        exists_fn=_controls_present,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     _sensor(
         "VArPct_Ena",
         "VArPct_Ena",
         report_name=REPORT_CONTROLS,
-        value_fn=lambda r: _control_status(r.inverter_controls.var_percent_enabled),
+        value_fn=lambda r: _controls_value(
+            r, lambda c: _control_status(c.var_percent_enabled)
+        ),
+        exists_fn=_controls_present,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     _sensor(
@@ -412,7 +429,8 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "ac_limit_rate",
         "ac_limit_rate",
         report_name=REPORT_CONTROLS,
-        value_fn=lambda r: r.inverter_controls.ac_limit_w,
+        value_fn=lambda r: _controls_value(r, lambda c: c.ac_limit_w),
+        exists_fn=_controls_present,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         unit="W",
@@ -422,7 +440,10 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "ac_limit_enable",
         "ac_limit_enable",
         report_name=REPORT_CONTROLS,
-        value_fn=lambda r: _ac_limit_status(r.inverter_controls.ac_limit_enabled),
+        value_fn=lambda r: _controls_value(
+            r, lambda c: _ac_limit_status(c.ac_limit_enabled)
+        ),
+        exists_fn=_controls_present,
         icon="mdi:power-plug",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
@@ -681,7 +702,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device="storage",
         source="web",
         value_fn=lambda r: _web_field(r, "storage_temperature"),
-        exists_fn=_storage_present,
+        exists_fn=lambda r: _storage_present(r) and _web_configured(r),
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
         unit="°C",
@@ -705,7 +726,8 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         report_name=REPORT_STORAGE,
         value_fn=lambda r: map_code(CHARGE_STATUS, r.device.storage.cha_st),
         exists_fn=_storage_present,
-        entity_category=EntityCategory.DIAGNOSTIC,
+        # 0.3's row for this entity had no seventh field, so it carried no category.
+        entity_category=None,
     ),
     _sensor(
         "max_charge",
@@ -820,130 +842,128 @@ _SINGLE_PHASE_UNSUPPORTED_METER_KEYS = (
 )
 
 
-def _meter_sensor_specs() -> tuple[tuple, ...]:
-    """(suffix, value_fn, device_class, state_class, unit, icon) for one meter."""
-    return (
-        (
-            "A",
-            lambda meter: meter.a,
-            SensorDeviceClass.CURRENT,
-            SensorStateClass.MEASUREMENT,
-            "A",
-            "mdi:current-ac",
-        ),
-        (
-            "AphA",
-            lambda meter: meter.aph_a,
-            SensorDeviceClass.CURRENT,
-            SensorStateClass.MEASUREMENT,
-            "A",
-            "mdi:current-ac",
-        ),
-        (
-            "AphB",
-            lambda meter: meter.aph_b,
-            SensorDeviceClass.CURRENT,
-            SensorStateClass.MEASUREMENT,
-            "A",
-            "mdi:current-ac",
-        ),
-        (
-            "AphC",
-            lambda meter: meter.aph_c,
-            SensorDeviceClass.CURRENT,
-            SensorStateClass.MEASUREMENT,
-            "A",
-            "mdi:current-ac",
-        ),
-        (
-            "power",
-            lambda meter: meter.w,
-            SensorDeviceClass.POWER,
-            SensorStateClass.MEASUREMENT,
-            "W",
-            "mdi:lightning-bolt",
-        ),
-        (
-            "WphA",
-            lambda meter: meter.wph_a,
-            SensorDeviceClass.POWER,
-            SensorStateClass.MEASUREMENT,
-            "W",
-            "mdi:lightning-bolt",
-        ),
-        (
-            "WphB",
-            lambda meter: meter.wph_b,
-            SensorDeviceClass.POWER,
-            SensorStateClass.MEASUREMENT,
-            "W",
-            "mdi:lightning-bolt",
-        ),
-        (
-            "WphC",
-            lambda meter: meter.wph_c,
-            SensorDeviceClass.POWER,
-            SensorStateClass.MEASUREMENT,
-            "W",
-            "mdi:lightning-bolt",
-        ),
-        (
-            "exported",
-            lambda meter: meter.tot_wh_exp,
-            SensorDeviceClass.ENERGY,
-            SensorStateClass.TOTAL_INCREASING,
-            "Wh",
-            "mdi:lightning-bolt",
-        ),
-        (
-            "imported",
-            lambda meter: meter.tot_wh_imp,
-            SensorDeviceClass.ENERGY,
-            SensorStateClass.TOTAL_INCREASING,
-            "Wh",
-            "mdi:lightning-bolt",
-        ),
-        (
-            "line_frequency",
-            lambda meter: meter.hz,
-            SensorDeviceClass.FREQUENCY,
-            SensorStateClass.MEASUREMENT,
-            "Hz",
-            None,
-        ),
-        (
-            "PhVphA",
-            lambda meter: meter.ph_vph_a,
-            SensorDeviceClass.VOLTAGE,
-            SensorStateClass.MEASUREMENT,
-            "V",
-            "mdi:lightning-bolt",
-        ),
-        (
-            "PhVphB",
-            lambda meter: meter.ph_vph_b,
-            SensorDeviceClass.VOLTAGE,
-            SensorStateClass.MEASUREMENT,
-            "V",
-            "mdi:lightning-bolt",
-        ),
-        (
-            "PhVphC",
-            lambda meter: meter.ph_vph_c,
-            SensorDeviceClass.VOLTAGE,
-            SensorStateClass.MEASUREMENT,
-            "V",
-            "mdi:lightning-bolt",
-        ),
-        (
-            "PPV",
-            lambda meter: meter.ppv,
-            SensorDeviceClass.VOLTAGE,
-            SensorStateClass.MEASUREMENT,
-            "V",
-            "mdi:lightning-bolt",
-        ),
-    )
+_METER_SENSOR_SPECS: tuple[tuple, ...] = (
+    (
+        "A",
+        lambda meter: meter.a,
+        SensorDeviceClass.CURRENT,
+        SensorStateClass.MEASUREMENT,
+        "A",
+        "mdi:current-ac",
+    ),
+    (
+        "AphA",
+        lambda meter: meter.aph_a,
+        SensorDeviceClass.CURRENT,
+        SensorStateClass.MEASUREMENT,
+        "A",
+        "mdi:current-ac",
+    ),
+    (
+        "AphB",
+        lambda meter: meter.aph_b,
+        SensorDeviceClass.CURRENT,
+        SensorStateClass.MEASUREMENT,
+        "A",
+        "mdi:current-ac",
+    ),
+    (
+        "AphC",
+        lambda meter: meter.aph_c,
+        SensorDeviceClass.CURRENT,
+        SensorStateClass.MEASUREMENT,
+        "A",
+        "mdi:current-ac",
+    ),
+    (
+        "power",
+        lambda meter: meter.w,
+        SensorDeviceClass.POWER,
+        SensorStateClass.MEASUREMENT,
+        "W",
+        "mdi:lightning-bolt",
+    ),
+    (
+        "WphA",
+        lambda meter: meter.wph_a,
+        SensorDeviceClass.POWER,
+        SensorStateClass.MEASUREMENT,
+        "W",
+        "mdi:lightning-bolt",
+    ),
+    (
+        "WphB",
+        lambda meter: meter.wph_b,
+        SensorDeviceClass.POWER,
+        SensorStateClass.MEASUREMENT,
+        "W",
+        "mdi:lightning-bolt",
+    ),
+    (
+        "WphC",
+        lambda meter: meter.wph_c,
+        SensorDeviceClass.POWER,
+        SensorStateClass.MEASUREMENT,
+        "W",
+        "mdi:lightning-bolt",
+    ),
+    (
+        "exported",
+        lambda meter: meter.tot_wh_exp,
+        SensorDeviceClass.ENERGY,
+        SensorStateClass.TOTAL_INCREASING,
+        "Wh",
+        "mdi:lightning-bolt",
+    ),
+    (
+        "imported",
+        lambda meter: meter.tot_wh_imp,
+        SensorDeviceClass.ENERGY,
+        SensorStateClass.TOTAL_INCREASING,
+        "Wh",
+        "mdi:lightning-bolt",
+    ),
+    (
+        "line_frequency",
+        lambda meter: meter.hz,
+        SensorDeviceClass.FREQUENCY,
+        SensorStateClass.MEASUREMENT,
+        "Hz",
+        None,
+    ),
+    (
+        "PhVphA",
+        lambda meter: meter.ph_vph_a,
+        SensorDeviceClass.VOLTAGE,
+        SensorStateClass.MEASUREMENT,
+        "V",
+        "mdi:lightning-bolt",
+    ),
+    (
+        "PhVphB",
+        lambda meter: meter.ph_vph_b,
+        SensorDeviceClass.VOLTAGE,
+        SensorStateClass.MEASUREMENT,
+        "V",
+        "mdi:lightning-bolt",
+    ),
+    (
+        "PhVphC",
+        lambda meter: meter.ph_vph_c,
+        SensorDeviceClass.VOLTAGE,
+        SensorStateClass.MEASUREMENT,
+        "V",
+        "mdi:lightning-bolt",
+    ),
+    (
+        "PPV",
+        lambda meter: meter.ppv,
+        SensorDeviceClass.VOLTAGE,
+        SensorStateClass.MEASUREMENT,
+        "V",
+        "mdi:lightning-bolt",
+    ),
+)
 
 
 def _meter_sensor_descriptions(
@@ -962,7 +982,7 @@ def _meter_sensor_descriptions(
             unit=unit,
             icon=icon,
         )
-        for suffix, getter, device_class, state_class, unit, icon in _meter_sensor_specs()
+        for suffix, getter, device_class, state_class, unit, icon in _METER_SENSOR_SPECS
         if phases != 1 or suffix not in _SINGLE_PHASE_UNSUPPORTED_METER_KEYS
     ]
     descriptions.append(
@@ -1193,8 +1213,9 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         translation_key="ac_limit_rate",
         device="inverter",
         report_name=REPORT_CONTROLS,
-        value_fn=lambda r: r.inverter_controls.ac_limit_w,
+        value_fn=lambda r: _controls_value(r, lambda c: c.ac_limit_w),
         set_fn=lambda r, v: r.inverter_controls.set_ac_limit_w(v),
+        exists_fn=_controls_present,
         max_fn=lambda r: (
             (r.device.settings.w_max if r.device.settings else None)
             or AC_LIMIT_RATE_FALLBACK_MAX_W
@@ -1210,9 +1231,10 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         translation_key="power_factor",
         device="inverter",
         report_name=REPORT_CONTROLS,
-        value_fn=lambda r: r.inverter_controls.power_factor,
+        value_fn=lambda r: _controls_value(r, lambda c: c.power_factor),
         set_fn=lambda r, v: r.inverter_controls.set_power_factor(v),
-        available_fn=lambda r: r.inverter_controls.power_factor is not None,
+        exists_fn=_controls_present,
+        available_fn=lambda r: _controls_value(r, lambda c: c.power_factor) is not None,
         native_min_value=-1,
         native_max_value=1,
         native_step=0.001,
@@ -1225,7 +1247,7 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         source="web",
         value_fn=lambda r: _web_field(r, "battery_power_w"),
         set_fn=lambda r, v: r.web_control.set_battery_power_w(v),
-        exists_fn=_web_configured,
+        exists_fn=lambda r: _storage_present(r) and _web_configured(r),
         available_fn=lambda r: (
             _web_configured(r) and r.web_control.battery_mode_is_manual
         ),
@@ -1242,7 +1264,7 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         source="web",
         value_fn=lambda r: _web_field(r, "soc_max"),
         set_fn=lambda r, v: r.web_control.set_soc_maximum(int(round(v))),
-        exists_fn=_web_configured,
+        exists_fn=lambda r: _storage_present(r) and _web_configured(r),
         available_fn=lambda r: (
             _web_configured(r) and r.web_control.battery_mode_is_manual
         ),
@@ -1278,13 +1300,6 @@ def number_descriptions(runtime: FroniusRuntimeData) -> list[FroniusNumberDescri
 
 
 # -- select table -----------------------------------------------------------------
-
-
-def _reverse_lookup(options_map: dict[int, str], label: str) -> int:
-    for code, mapped_label in options_map.items():
-        if mapped_label == label:
-            return code
-    raise ValueError(f"Unsupported option: {label}")
 
 
 async def _set_ext_control_mode(runtime: FroniusRuntimeData, code: int) -> None:
@@ -1361,23 +1376,32 @@ _SELECT_DESCRIPTIONS: tuple[FroniusSelectDescription, ...] = (
         "ac_limit_enable",
         report_name=REPORT_CONTROLS,
         options_map=_CONTROL_STATUS_OPTIONS,
-        value_fn=lambda r: _control_status(r.inverter_controls.ac_limit_enabled),
+        value_fn=lambda r: _controls_value(
+            r, lambda c: _control_status(c.ac_limit_enabled)
+        ),
         set_fn=lambda r, code: r.inverter_controls.set_ac_limit_enable(bool(code)),
+        exists_fn=_controls_present,
     ),
     _select(
         "power_factor_enable",
         report_name=REPORT_CONTROLS,
         options_map=_CONTROL_STATUS_OPTIONS,
-        value_fn=lambda r: _control_status(r.inverter_controls.power_factor_enabled),
+        value_fn=lambda r: _controls_value(
+            r, lambda c: _control_status(c.power_factor_enabled)
+        ),
         set_fn=lambda r, code: r.inverter_controls.set_power_factor_enable(bool(code)),
-        available_fn=lambda r: r.inverter_controls.power_factor_enabled is not None,
+        exists_fn=_controls_present,
+        available_fn=lambda r: (
+            _controls_value(r, lambda c: c.power_factor_enabled) is not None
+        ),
     ),
     _select(
         "Conn",
         report_name=REPORT_CONTROLS,
         options_map=_CONTROL_STATUS_OPTIONS,
-        value_fn=lambda r: _control_status(r.inverter_controls.connected),
+        value_fn=lambda r: _controls_value(r, lambda c: _control_status(c.connected)),
         set_fn=lambda r, code: r.inverter_controls.set_connected(bool(code)),
+        exists_fn=_controls_present,
     ),
 )
 
@@ -1520,11 +1544,12 @@ def device_info(
         )
     if kind == "storage":
         web_data = runtime.web_data
+        storage_model = web_data.storage_model if web_data else None
         return DeviceInfo(
             identifiers={(DOMAIN, f"{key}_battery_storage")},
-            name="Battery Storage",
+            name=storage_model or "Battery Storage",
             manufacturer=web_data.storage_manufacturer if web_data else None,
-            model=web_data.storage_model if web_data else None,
+            model=storage_model,
             serial_number=web_data.storage_serial if web_data else None,
         )
     meters = runtime.device.meters
@@ -1578,6 +1603,15 @@ class FroniusEntity(CoordinatorEntity):
         if coordinator is None or not coordinator.last_update_success:
             return False
         return description.available_fn(self._runtime)
+
+    async def async_run_write(self, action: Callable[[], Awaitable[None]]) -> None:
+        """Await a write action, mapping its errors to the ones HA expects."""
+        try:
+            await action()
+        except ValueError as err:
+            raise ServiceValidationError(str(err)) from err
+        except (ModbusError, RuntimeError) as err:
+            raise HomeAssistantError(str(err)) from err
 
 
 class FroniusTotalSensor(FroniusEntity, RestoreSensor):
