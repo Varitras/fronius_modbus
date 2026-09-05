@@ -1,6 +1,10 @@
 """End-to-end: a real Home Assistant sets the entry up on the mocked shared connection."""
 
-from modbus_connection import ModbusConnectionError, ModbusTimeoutError
+from modbus_connection import (
+    ModbusConnectionError,
+    ModbusTimeoutError,
+    ServerDeviceFailureError,
+)
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -318,3 +322,39 @@ async def test_diagnostics_redact_the_serial_numbers(hass, mock_modbus):
     registers_unit_1 = result["registers"]["1"]["holding"]
     assert not (set(registers_unit_1) & {str(a) for a in range(40052, 40068)})
     assert "inverter" in result["updated"]
+
+
+# Inside the SunSpec model 160 block in the fixture, past the header the model
+# walk itself reads: failing here fails only the MPPT sub-system's own poll.
+MPPT_REGISTER_ADDRESS = 40260
+
+
+async def test_a_failed_mppt_read_at_startup_keeps_the_mppt_entities(
+    hass, mock_modbus
+):
+    """A sub-system that is silent on the first poll must not cost the user its history.
+
+    The MPPT descriptions are built from the values the first poll returned, so a
+    read failure there makes every MPPT entity look retired to the registry cleanup.
+    """
+    entry = make_entry(hass)
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{entity_prefix(entry.entry_id)}_mppt_module_0_dc_power",
+        config_entry=entry,
+    )
+    mock_modbus.fail_read(
+        INVERTER_UNIT_ID, MPPT_REGISTER_ADDRESS, ServerDeviceFailureError()
+    )
+
+    await setup_entry(hass, entry)
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert (
+        registry.async_get_entity_id(
+            "sensor", DOMAIN, f"{entity_prefix(entry.entry_id)}_mppt_module_0_dc_power"
+        )
+        is not None
+    )

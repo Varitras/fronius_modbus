@@ -122,6 +122,7 @@ class SharedMockModbus:
         self.connections: list[MockModbusConnection] = []
         self._fixture = fixture
         self._request_failures: dict[int, Exception | None] = {}
+        self._read_failures: dict[tuple[int, int], Exception | None] = {}
 
     def __call__(self, params, **_kwargs) -> MockModbusConnection:
         self.params_seen.append(params)
@@ -130,6 +131,8 @@ class SharedMockModbus:
             connection.for_unit(unit_id).load_raw(spaces)
         for unit_id, error in self._request_failures.items():
             connection.for_unit(unit_id).fail_requests(error)
+        for (unit_id, address), error in self._read_failures.items():
+            connection.for_unit(unit_id).fail_read(address, error)
         self.connections.append(connection)
         return connection
 
@@ -141,6 +144,12 @@ class SharedMockModbus:
     def connected(self) -> bool:
         """Whether the current connection is up."""
         return bool(self.connections) and self.connections[-1].connected
+
+    def fail_read(self, unit_id: int, address: int, error: Exception | None) -> None:
+        """Make one register block unreadable, on the current connection and every later one."""
+        self._read_failures[(unit_id, address)] = error
+        for connection in self.connections:
+            connection.for_unit(unit_id).fail_read(address, error)
 
     def fail_requests(self, unit_id: int, error: Exception | None) -> None:
         """Make a unit stop answering, on the current connection and every later one."""

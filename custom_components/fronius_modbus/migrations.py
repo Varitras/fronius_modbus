@@ -422,7 +422,20 @@ async def async_remove_unexpected_entities(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> None:
-    """Remove registry entities that the integration no longer creates."""
+    """Remove registry entities that the integration no longer creates.
+
+    Only after a clean poll: the expected set is built from what the device
+    answered, so a sub-system that was silent this once would otherwise take
+    its entities - and their history - with it.
+    """
+    runtime = entry.runtime_data
+    web_refresh_failed = runtime.web is not None and not runtime.web.last_update_success
+    if runtime.modbus.data.report.failed or web_refresh_failed:
+        _LOGGER.info(
+            "Skipping the stale-entity cleanup until a poll succeeds everywhere"
+        )
+        return
+
     registry = er.async_get(hass)
     expected = expected_unique_ids(entry, entry.runtime_data)
     removed = 0
