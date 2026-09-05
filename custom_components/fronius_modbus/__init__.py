@@ -175,6 +175,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
             on_battery_write=lambda: modbus.tolerate_failures_until(
                 time.monotonic() + BATTERY_WRITE_MODBUS_RECOVERY_SECONDS
             ),
+            modbus_soc_minimum=lambda: (
+                modbus.storage_control.soc_minimum
+                if modbus.storage_control is not None
+                else None
+            ),
         )
         web = FroniusWebCoordinator(
             hass, entry, web_control, interval=timedelta(seconds=web_scan_interval)

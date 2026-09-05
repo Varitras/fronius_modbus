@@ -175,6 +175,7 @@ class FroniusWebControl:
         storage_present: bool,
         inverter_firmware: str | None,
         on_battery_write: Callable[[], None],
+        modbus_soc_minimum: Callable[[], int | None] = lambda: None,
     ) -> None:
         """Bind to the web clients; on_battery_write opens the Modbus recovery window."""
         self._hass = hass
@@ -185,6 +186,7 @@ class FroniusWebControl:
         self._storage_present = storage_present
         self._inverter_firmware = inverter_firmware
         self._on_battery_write = on_battery_write
+        self._modbus_soc_minimum = modbus_soc_minimum
         self.data = WebData()
         self._coordinator: Any = None
         self._delayed_refresh_task: asyncio.Task | None = None
@@ -572,7 +574,10 @@ class FroniusWebControl:
             mode == BATTERY_MODE_MANUAL
             and current_effective_mode != BATTERY_MODE_MANUAL
         ):
-            soc_min = self.data.soc_min
+            # Leaving Manual resets the web API's own minimum to SOC_LOWEST, so the
+            # Modbus reserve is the only record of what the user actually wants.
+            modbus_reserve = self._modbus_soc_minimum()
+            soc_min = self.data.soc_min if modbus_reserve is None else modbus_reserve
 
         await self._async_web_job(
             self._client.set_battery_config,

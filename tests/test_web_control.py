@@ -78,22 +78,31 @@ class FakeWebClient:
         return True
 
 
-@pytest.fixture
-def control(hass):
+def make_control(hass, **kwargs) -> FroniusWebControl:
+    """A web control on a fake client, with the write events collected on `events`."""
     entry = MockConfigEntry(domain=DOMAIN, data={"host": "192.0.2.1"}, title="Fronius")
     entry.add_to_hass(hass)
-    events = []
+    events: list[str] = []
+    defaults = {
+        "client": FakeWebClient(),
+        "technician_client": None,
+        "storage_present": True,
+        "inverter_firmware": "1.38.6-1",
+    }
     control = FroniusWebControl(
         hass,
         entry,
         host="192.0.2.1",
-        client=FakeWebClient(),
-        technician_client=None,
-        storage_present=True,
-        inverter_firmware="1.38.6-1",
         on_battery_write=lambda: events.append("write"),
+        **(defaults | kwargs),
     )
     control.events = events
+    return control
+
+
+@pytest.fixture
+def control(hass):
+    control = make_control(hass)
     yield control
     control.shutdown()
 
@@ -130,3 +139,21 @@ async def test_charge_from_grid_implies_charge_from_ac(control):
     await control.set_charge_sources(charge_from_grid=True)
     assert control._client.calls[-1] == ("sources", True, True)
     assert (control.data.charge_from_grid, control.data.charge_from_ac) == (True, True)
+
+
+async def test_switching_back_to_manual_keeps_the_modbus_reserve(hass):
+    """Manual mode must restore the Modbus reserve, not the 5 % Auto mode leaves behind.
+
+    Leaving Manual resets the web API's own minimum to 5 %, so reading it back on
+    the way in would silently discharge the battery below the user's reserve.
+    """
+    control = make_control(hass, modbus_soc_minimum=lambda: 7)
+    try:
+        await control.async_refresh()
+        await control.set_battery_mode(1)
+        await control.set_battery_mode(0)
+        await control.set_battery_mode(1)
+    finally:
+        control.shutdown()
+
+    assert control._client.calls[-1] == ("battery", 1, 0, 7)
