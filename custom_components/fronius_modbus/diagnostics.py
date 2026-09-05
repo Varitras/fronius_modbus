@@ -34,5 +34,6 @@ async def async_get_config_entry_diagnostics(
         },
         "web": None
         if web_data is None
-        else dataclasses.asdict(web_data) | {"storage_serial": REDACTED},
+        else dataclasses.asdict(web_data)
+        | {"storage_serial": REDACTED, "modbus_restriction_ip": REDACTED},
     }

@@ -62,6 +62,12 @@ def _description(descriptions, key):
     return next(d for d in descriptions if d.key == key)
 
 
+def _report(sensor, value) -> None:
+    """Make the sensor's next poll report `value`, leaving the shared table alone."""
+    sensor.entity_description = replace(
+        sensor.entity_description, value_fn=lambda r: value
+    )
+
 async def test_sensor_descriptions_carry_the_polled_values(runtime):
     descriptions = entities.sensor_descriptions(runtime)
     assert _description(descriptions, "acpower").value_fn(runtime) == 3075.1
@@ -96,34 +102,26 @@ async def test_a_total_sensor_keeps_its_value_when_a_poll_reports_none(
 
     assert sensor.native_value == 33187794.59
 
-    # The description is a frozen dataclass; bypass __setattr__ to swap in a poll that
-    # reports no value, the same way a real Modbus timeout on "wh" alone would.
-    object.__setattr__(description, "value_fn", lambda r: None)
+    # A poll that reports no value, the same way a real Modbus timeout on "wh"
+    # alone would. The description is swapped on the sensor rather than mutated:
+    # the table's instances are shared across every test in the session.
+    _report(sensor, None)
     assert sensor.native_value == 33187794.59
-
-
-def _reset_acenergy_value_fn(description) -> None:
-    """Descriptions are shared, frozen dataclass instances -- other tests mutate
-    ``value_fn`` in place via object.__setattr__, so restore the polled baseline
-    before asserting against it."""
-    object.__setattr__(description, "value_fn", lambda r: 33187794.59)
 
 
 async def test_a_total_sensor_ignores_a_lower_value(hass, entry, runtime):
     description = _description(entities.sensor_descriptions(runtime), "acenergy")
-    _reset_acenergy_value_fn(description)
     sensor = entities.FroniusTotalSensor(runtime, entry, description)
     sensor.hass = hass
 
     assert sensor.native_value == 33187794.59
 
-    object.__setattr__(description, "value_fn", lambda r: 33187794.58)
+    _report(sensor, 33187794.58)
     assert sensor.native_value == 33187794.59
 
 
 async def test_a_total_sensor_ignores_an_implausible_jump(hass, entry, runtime):
     description = _description(entities.sensor_descriptions(runtime), "acenergy")
-    _reset_acenergy_value_fn(description)
     sensor = entities.FroniusTotalSensor(runtime, entry, description)
     sensor.hass = hass
 
@@ -132,20 +130,19 @@ async def test_a_total_sensor_ignores_an_implausible_jump(hass, entry, runtime):
     # A literal jump, not the module's own limit: reading the constant back
     # would make the test agree with whatever the module says.
     too_high = 33187794.59 + 200_000
-    object.__setattr__(description, "value_fn", lambda r: too_high)
+    _report(sensor, too_high)
     assert sensor.native_value == 33187794.59
 
 
 async def test_a_total_sensor_accepts_a_plausible_higher_value(hass, entry, runtime):
     description = _description(entities.sensor_descriptions(runtime), "acenergy")
-    _reset_acenergy_value_fn(description)
     sensor = entities.FroniusTotalSensor(runtime, entry, description)
     sensor.hass = hass
 
     assert sensor.native_value == 33187794.59
 
     higher = 33187794.59 + entities.TOTAL_INCREASING_MAX_STEP_WH - 1
-    object.__setattr__(description, "value_fn", lambda r: higher)
+    _report(sensor, higher)
     assert sensor.native_value == higher
 
 
@@ -182,3 +179,16 @@ async def test_an_invalid_soc_minimum_writes_nothing(hass, entry, connection):
         web_control.shutdown()
 
     assert writes == []
+
+
+async def test_a_total_sensor_follows_a_genuine_counter_reset(hass, entry, runtime):
+    """A replaced meter really does restart at zero; refusing that forever freezes the sensor."""
+    description = _description(entities.sensor_descriptions(runtime), "acenergy")
+    sensor = entities.FroniusTotalSensor(runtime, entry, description)
+    sensor.hass = hass
+    assert sensor.native_value == 33187794.59
+
+    _report(sensor, 120.0)
+    for _ in range(entities.TOTAL_INCREASING_RESET_POLLS - 1):
+        assert sensor.native_value == 33187794.59
+    assert sensor.native_value == 120.0

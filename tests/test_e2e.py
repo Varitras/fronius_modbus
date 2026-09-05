@@ -1,5 +1,8 @@
 """End-to-end: a real Home Assistant sets the entry up on the mocked shared connection."""
 
+from dataclasses import replace
+from types import SimpleNamespace
+
 from modbus_connection import (
     ModbusConnectionError,
     ModbusTimeoutError,
@@ -20,6 +23,7 @@ from custom_components.fronius_modbus.diagnostics import (
     async_get_config_entry_diagnostics,
 )
 from custom_components.fronius_modbus.token_store import async_get_token_store
+from custom_components.fronius_modbus.web_control import WebData
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
@@ -322,6 +326,18 @@ async def test_diagnostics_redact_the_serial_numbers(hass, mock_modbus):
     registers_unit_1 = result["registers"]["1"]["holding"]
     assert not (set(registers_unit_1) & {str(a) for a in range(40052, 40068)})
     assert "inverter" in result["updated"]
+
+    # The restriction IP is the owner's LAN address, which a bug report is
+    # routinely pasted into a public issue.
+    entry.runtime_data = replace(
+        entry.runtime_data,
+        web=SimpleNamespace(
+            data=WebData(modbus_restriction_ip="192.0.2.99", storage_serial="S")
+        ),
+    )
+    web = (await async_get_config_entry_diagnostics(hass, entry))["web"]
+    assert web["modbus_restriction_ip"] == "**REDACTED**"
+    assert web["storage_serial"] == "**REDACTED**"
 
 
 # Inside the SunSpec model 160 block in the fixture, past the header the model

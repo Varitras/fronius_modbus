@@ -77,6 +77,9 @@ type DeviceKind = Literal["inverter", "storage", "meter"]
 
 # A new poll below the last value, or a jump above it, is a bad reading, not a reset.
 TOTAL_INCREASING_MAX_STEP_WH = 100_000
+# ... unless the lower value keeps coming: a meter or inverter swap really does
+# restart the counter, and refusing it forever would freeze the sensor for good.
+TOTAL_INCREASING_RESET_POLLS = 3
 # 0.3's static fallback for the AC limit rate's max, kept when settings.w_max is unknown.
 AC_LIMIT_RATE_FALLBACK_MAX_W = 50_000
 
@@ -1629,6 +1632,7 @@ class FroniusTotalSensor(FroniusEntity, RestoreSensor):
         """Track the last accepted value alongside the base entity's state."""
         super().__init__(runtime, entry, description)
         self._last_value: float | None = None
+        self._lower_values_seen = 0
 
     async def async_added_to_hass(self) -> None:
         """Seed the last accepted value from the entity registry."""
@@ -1650,13 +1654,26 @@ class FroniusTotalSensor(FroniusEntity, RestoreSensor):
             return self._last_value
         if self._last_value is not None:
             if new_value < self._last_value:
+                self._lower_values_seen += 1
+                if self._lower_values_seen < TOTAL_INCREASING_RESET_POLLS:
+                    _LOGGER.warning(
+                        "Ignoring %s: %s is lower than the last value %s",
+                        self.entity_id,
+                        new_value,
+                        self._last_value,
+                    )
+                    return self._last_value
                 _LOGGER.warning(
-                    "Ignoring %s: %s is lower than the last value %s",
+                    "Accepting %s: %s stayed below the last value %s for %s polls, "
+                    "which is a counter reset, not a bad reading",
                     self.entity_id,
                     new_value,
                     self._last_value,
+                    TOTAL_INCREASING_RESET_POLLS,
                 )
-                return self._last_value
+                self._lower_values_seen = 0
+                self._last_value = new_value
+                return new_value
             if new_value - self._last_value > TOTAL_INCREASING_MAX_STEP_WH:
                 _LOGGER.warning(
                     "Ignoring %s: %s jumped more than %s above the last value %s",
@@ -1666,5 +1683,6 @@ class FroniusTotalSensor(FroniusEntity, RestoreSensor):
                     self._last_value,
                 )
                 return self._last_value
+        self._lower_values_seen = 0
         self._last_value = new_value
         return new_value
