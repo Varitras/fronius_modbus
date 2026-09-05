@@ -1,5 +1,6 @@
 """The storage mode automaton and its write sequences, watched through the mock's write events."""
 
+from modbus_connection import ServerDeviceFailureError
 from modbus_connection.model.sunspec import scan
 import pytest
 
@@ -93,6 +94,7 @@ async def test_grid_charge_power_is_a_negative_discharge_rate(control, writes):
     await control.set_mode(ExtendedMode.CHARGE_FROM_GRID)
     await control.set_grid_charge_power_w(2560)
     assert _words(writes, OUT_W_RTE)[-1] == (-2500) & 0xFFFF
+    await control._storage.async_update()
     assert control.grid_charge_power_pct == 25.0
 
 
@@ -150,11 +152,33 @@ async def test_a_negative_discharge_rate_reads_as_charging(inverter_unit):
 async def test_charging_from_the_grid_reads_as_charging(control, inverter_unit):
     inverter_unit.holding[CHA_GRI_SET] = 1
     await control.set_mode(ExtendedMode.CHARGE_FROM_GRID)
+    await control._storage.async_update()
 
     assert control.control_mode == 1
 
 
 async def test_discharging_to_the_grid_reads_as_discharging(control):
     await control.set_mode(ExtendedMode.DISCHARGE_TO_GRID)
+    await control._storage.async_update()
 
     assert control.control_mode == 2
+
+
+async def test_a_write_succeeds_when_the_read_right_after_it_is_refused(
+    control, inverter_unit, writes
+):
+    """The inverter refuses a read for a moment right after a write (real GEN24, fw 1.38.6-1).
+
+    set_minimum_reserve wrote MinRsvPct successfully but then raised, because
+    it read the storage block back inside the write lock and the device
+    answered that read with a transient exception 4.
+    """
+
+    def arm_read_failure(_event):
+        inverter_unit.fail_read(STORAGE_HEADER, ServerDeviceFailureError())
+
+    inverter_unit.on_write(arm_read_failure)
+
+    await control.set_minimum_reserve(6)
+
+    assert _words(writes, MIN_RSV_PCT) == [600]

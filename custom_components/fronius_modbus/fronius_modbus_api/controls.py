@@ -89,6 +89,9 @@ class InverterControls:
         self, enable_field: str, value_field: str, value: float
     ) -> bool:
         """Write the value; pulse the enable flag off and on around it when it was on. Returns whether it was on."""
+        # No read-back after the last write here: the device refuses a read
+        # for a moment right after a write (real GEN24, fw 1.38.6-1); the
+        # coordinator's next poll picks the new values up instead.
         async with self._write_lock:
             await self._controls.async_update()
             was_enabled: bool = getattr(self._controls, enable_field) == ENABLED
@@ -98,7 +101,6 @@ class InverterControls:
             if was_enabled:
                 await self._sleep(APPLY_TOGGLE_DELAY_SECONDS)
                 await self._controls.write(enable_field, ENABLED)
-            await self._controls.async_update()
             return was_enabled
 
     async def set_ac_limit_w(self, watts: float) -> None:
@@ -120,7 +122,6 @@ class InverterControls:
                 "w_max_lim_ena", ENABLED if enabled else DISABLED
             )
             self._ac_limit_mask_until = 0.0
-            await self._controls.async_update()
 
     async def set_power_factor(self, value: float) -> None:
         """Set the power factor, -1..1."""
@@ -140,10 +141,8 @@ class InverterControls:
                 "out_pf_set_ena", ENABLED if enabled else DISABLED
             )
             self._power_factor_mask_until = 0.0
-            await self._controls.async_update()
 
     async def set_connected(self, connected: bool) -> None:
         """Connect or disconnect the inverter from the grid."""
         async with self._write_lock:
             await self._controls.write("conn", ENABLED if connected else DISABLED)
-            await self._controls.async_update()

@@ -1,5 +1,6 @@
 """AC limit and power factor writes with the enable pulse the inverter needs to apply a new value."""
 
+from modbus_connection import ServerDeviceFailureError
 from modbus_connection.model.sunspec import scan
 import pytest
 
@@ -62,6 +63,7 @@ def _at(events, address):
 async def test_ac_limit_in_watts_becomes_percent_of_max_power(controls, writes):
     await controls.set_ac_limit_w(2500)
     assert [w for _, w in _at(writes, W_MAX_LIM_PCT)] == [2500]  # 25.00 % with SF -2
+    await controls._controls.async_update()
     assert controls.ac_limit_w == 2500
 
 
@@ -93,3 +95,22 @@ async def test_power_factor_is_written_scaled(controls, writes):
 async def test_connection_control(controls, writes):
     await controls.set_connected(False)
     assert [w for _, w in _at(writes, CONN)] == [0]
+
+
+async def test_the_pulse_succeeds_when_the_read_right_after_it_is_refused(
+    controls, inverter_unit, writes
+):
+    """The inverter refuses a read for a moment right after a write (real GEN24, fw 1.38.6-1).
+
+    A write followed immediately by a read-back can hit a transient exception
+    4 on the real device; the write itself must still count as a success.
+    """
+
+    def arm_read_failure(_event):
+        inverter_unit.fail_read(CONTROLS_HEADER, ServerDeviceFailureError())
+
+    inverter_unit.on_write(arm_read_failure)
+
+    await controls.set_ac_limit_w(2500)
+
+    assert [w for _, w in _at(writes, W_MAX_LIM_PCT)] == [2500]

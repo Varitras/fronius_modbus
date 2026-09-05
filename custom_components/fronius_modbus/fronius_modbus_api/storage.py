@@ -175,11 +175,13 @@ class StorageControl:
             out_rate = -(self.grid_charge_power_pct or 0.0)
         if mode is ExtendedMode.DISCHARGE_TO_GRID:
             in_rate = -(self.grid_discharge_power_pct or 0.0)
+        # The device refuses a read for a moment right after a write (real
+        # GEN24, fw 1.38.6-1: exception 4 on the block read that follows).
+        # The coordinator's next poll picks the new values up instead.
         async with self._write_lock:
             await self._storage.write("stor_ctl_mod", sunspec_mode)
             await self._storage.write("in_w_rte", in_rate)
             await self._storage.write("out_w_rte", out_rate)
-            await self._storage.async_update()
             self._extended_mode = mode
 
     async def set_charge_limit_w(self, watts: float) -> None:
@@ -232,9 +234,7 @@ class StorageControl:
             )
         async with self._write_lock:
             await self._storage.write("min_rsv_pct", float(int(percent)))
-            await self._storage.async_update()
 
     async def _write_rate(self, field_name: str, percent: float) -> None:
         async with self._write_lock:
             await self._storage.write(field_name, percent)
-            await self._storage.async_update()
