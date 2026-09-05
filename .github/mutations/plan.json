@@ -1,0 +1,86 @@
+[
+  {
+    "label": "storage: auto is derived from mode 0, not from a charge mode",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "    if mode == MODE_AUTO:\n        return ExtendedMode.AUTO\n",
+    "new": "    if mode == MODE_CHARGE:\n        return ExtendedMode.AUTO\n",
+    "tests": "auto_on_the_device_reads_as_auto"
+  },
+  {
+    "label": "storage: blocking discharge is a charge-limit mode",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "    ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT,\n    ExtendedMode.BLOCK_DISCHARGING,\n}",
+    "new": "    ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT,\n}",
+    "tests": "blocking_discharge_still_allows_a_charge_limit"
+  },
+  {
+    "label": "storage: a rate is clamped to the full rate, not to twice it",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "min(FULL_RATE_PCT, watts / maximum_w * FULL_RATE_PCT)",
+    "new": "min(200.0, watts / maximum_w * FULL_RATE_PCT)",
+    "tests": "rate_above_the_maximum_is_clamped"
+  },
+  {
+    "label": "controls: the enable pulse waits before switching back on",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
+    "old": "                await self._sleep(APPLY_TOGGLE_DELAY_SECONDS)\n",
+    "new": "",
+    "tests": "pulsed_off_and_on_around_the_write"
+  },
+  {
+    "label": "controls: a power factor outside -1..1 is refused",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
+    "old": "        if not -1.0 <= value <= 1.0:",
+    "new": "        if not -2.0 <= value <= 2.0:",
+    "tests": "power_factor_outside_the_unit_range_is_refused"
+  },
+  {
+    "label": "device: a dead link propagates instead of failing one report",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "                await self._component(name).async_update()\n            except ModbusConnectionError:\n                raise\n",
+    "new": "                await self._component(name).async_update()\n            except ModbusConnectionError:\n                pass\n",
+    "tests": "link_that_dies_after_setup_still_propagates"
+  },
+  {
+    "label": "device: the PV channels are the ones labelled MPPT",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "PV_LABEL = \"MPPT\"",
+    "new": "PV_LABEL = \"XXXX\"",
+    "tests": "foreign_labelled_module_is_not_a_pv_channel"
+  },
+  {
+    "label": "device: the serial words are removed from the raw diagnostics",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "                raw.get(\"holding\", {}).pop(address, None)",
+    "new": "                pass",
+    "tests": "raw_diagnostics_drop_the_serial_number"
+  },
+  {
+    "label": "derived: a negative load while the battery charges hard is unavailable",
+    "path": "custom_components/fronius_modbus/derived.py",
+    "old": "        if candidate < 0 and charging_hard:",
+    "new": "        if False:",
+    "tests": "strong_charging_makes_a_negative_load_unavailable"
+  },
+  {
+    "label": "coordinator: three timeouts recycle the link",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "TIMEOUTS_BEFORE_RECYCLE = 3",
+    "new": "TIMEOUTS_BEFORE_RECYCLE = 300",
+    "tests": "three_timeouts_recycle_the_link"
+  },
+  {
+    "label": "coordinator: failures are tolerated only inside the write window",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "if self.data is not None and time.monotonic() < self._tolerate_until:",
+    "new": "if self.data is not None:",
+    "tests": "failures_outside_the_write_window_are_not_tolerated"
+  },
+  {
+    "label": "entities: a total sensor rejects an implausible jump",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "TOTAL_INCREASING_MAX_STEP_WH = 100_000",
+    "new": "TOTAL_INCREASING_MAX_STEP_WH = 10**12",
+    "tests": "total_sensor_ignores_an_implausible_jump"
+  }
+]

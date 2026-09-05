@@ -127,7 +127,9 @@ async def test_a_total_sensor_ignores_an_implausible_jump(hass, entry, runtime):
 
     assert sensor.native_value == 33187794.59
 
-    too_high = 33187794.59 + entities.TOTAL_INCREASING_MAX_STEP_WH + 1
+    # A literal jump, not the module's own limit: reading the constant back
+    # would make the test agree with whatever the module says.
+    too_high = 33187794.59 + 200_000
     object.__setattr__(description, "value_fn", lambda r: too_high)
     assert sensor.native_value == 33187794.59
 

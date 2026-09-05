@@ -112,3 +112,15 @@ async def test_minimum_reserve_is_written_as_whole_percent(control, writes):
     assert _words(writes, MIN_RSV_PCT) == [700]
     with pytest.raises(ValueError):
         await control.set_minimum_reserve(4)
+
+
+async def test_blocking_discharge_still_allows_a_charge_limit(control, writes):
+    """Blocking discharge leaves the charge path under control.
+
+    The device is in mode 3 with the discharge rate at zero; the charge rate
+    is still the user's to set, and refusing it here would strand the entity.
+    """
+    await control.set_mode(ExtendedMode.BLOCK_DISCHARGING)
+    await control.set_charge_limit_w(5120)
+
+    assert _words(writes, IN_W_RTE)[-1] == 5000

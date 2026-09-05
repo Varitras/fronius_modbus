@@ -88,3 +88,20 @@ async def test_a_shifted_map_reloads_the_entry(coordinator, hass, entry, monkeyp
     with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()
     reload.assert_called_once_with(entry.entry_id)
+
+
+async def test_failures_outside_the_write_window_are_not_tolerated(
+    coordinator, inverter_unit
+):
+    """The tolerance is bounded by the deadline, not by having data at all.
+
+    A window that never closes would keep every entity on its last value for
+    the rest of the run, with nothing saying the inverter is gone.
+    """
+    first = await coordinator._async_update_data()
+    coordinator.data = first
+    coordinator.tolerate_failures_until(0.0)
+    inverter_unit.fail_requests(ModbusConnectionError())
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()

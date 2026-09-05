@@ -147,3 +147,40 @@ async def test_unlabelled_channels_fall_back_to_the_last_two_for_storage(
     await device.async_update()
     assert device.mppt_channels.pv == (0, 1)
     assert (device.mppt_channels.charge, device.mppt_channels.discharge) == (2, 3)
+
+
+async def test_a_link_that_dies_after_setup_still_propagates(device, inverter_unit):
+    """A dead link during the per-component poll must reach the caller too.
+
+    The first poll fails in discovery, where the re-raise is obvious. Once the
+    device is set up the same failure arrives inside the component loop, and
+    swallowing it there would report a green poll over a dead connection.
+    """
+    await device.async_update()
+    inverter_unit.fail_requests(ModbusConnectionError())
+    with pytest.raises(ModbusConnectionError):
+        await device.async_update()
+
+
+def _relabel_module(holding: dict, module: int, label: str) -> None:
+    """Overwrite one model-160 module's id_str (8 words from header+11+20*module)."""
+    padded = label.ljust(16, "\0")[:16]
+    for word in range(8):
+        pair = padded[word * 2 : word * 2 + 2]
+        holding[40253 + 11 + 20 * module + word] = (ord(pair[0]) << 8) | ord(pair[1])
+
+
+async def test_a_foreign_labelled_module_is_not_a_pv_channel(connection, symo_gen24):
+    """The PV channels are the ones LABELLED as strings, not "whatever is left".
+
+    The fallback for unlabelled firmware would otherwise cover for a label
+    check that matches nothing at all, and a module that is neither a string
+    nor a storage path would be counted as PV.
+    """
+    holding = dict(symo_gen24[1]["holding"])
+    _relabel_module(holding, 0, "AUX 1")
+    connection.for_unit(1).load_raw({"holding": holding})
+    device = FroniusInverter(connection.for_unit(1), 1, {})
+    await device.async_update()
+
+    assert device.mppt_channels.pv == (1,)
