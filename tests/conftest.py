@@ -6,6 +6,8 @@ import pathlib
 from modbus_connection.mock import MockModbusConnection
 import pytest
 
+pytest_plugins = ("pytest_homeassistant_custom_component",)
+
 FIXTURES = pathlib.Path(__file__).with_name("fixtures")
 INVERTER_UNIT_ID = 1
 METER_UNIT_ID = 200
