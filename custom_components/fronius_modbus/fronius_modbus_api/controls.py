@@ -91,7 +91,7 @@ class InverterControls:
         """Write the value; pulse the enable flag off and on around it when it was on. Returns whether it was on."""
         async with self._write_lock:
             await self._controls.async_update()
-            was_enabled = getattr(self._controls, enable_field) == ENABLED
+            was_enabled: bool = getattr(self._controls, enable_field) == ENABLED
             if was_enabled:
                 await self._controls.write(enable_field, DISABLED)
             await self._controls.write(value_field, value)

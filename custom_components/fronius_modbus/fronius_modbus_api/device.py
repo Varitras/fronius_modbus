@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 import logging
-from typing import NamedTuple
+from typing import Any, NamedTuple, cast
 
 from modbus_connection import (
     ModbusConnectionError,
@@ -13,7 +13,12 @@ from modbus_connection import (
     ModbusTimeoutError,
     ModbusUnit,
 )
-from modbus_connection.model.sunspec import SunSpecError, SunSpecModels, scan
+from modbus_connection.model.sunspec import (
+    SunSpecError,
+    SunSpecModel,
+    SunSpecModels,
+    scan,
+)
 
 from .exceptions import NotAFroniusInverter
 from .sunspec_models import (
@@ -82,7 +87,9 @@ class DeviceIdentity(NamedTuple):
     serial: str
     version: str
     options: str
-    address: int | None
+    # `da` is a plain uint16 register; the reader hands every numeric field
+    # back as a float, so the type follows the reader rather than the spec.
+    address: float | None
 
 
 @dataclass
@@ -104,7 +111,9 @@ class MeterInfo:
 
 
 async def _read_identity(unit: ModbusUnit, chain: SunSpecModels) -> DeviceIdentity:
-    common = Common(unit, chain.first(COMMON_MODEL_ID))
+    # Model 1 is mandatory in every SunSpec map, and _scan() has already
+    # refused a chain without it - so the lookup cannot be None here.
+    common = Common(unit, cast(SunSpecModel, chain.first(COMMON_MODEL_ID)))
     await common.async_update()
     return DeviceIdentity(
         manufacturer=common.mn or "",
@@ -200,7 +209,9 @@ class FroniusInverter:
             if component is not None
         ) + tuple(meter_report_name(unit_id) for unit_id in self.meters)
 
-    def _optional(self, component_class, chain: SunSpecModels, model_id: int):
+    def _optional(
+        self, component_class: Any, chain: SunSpecModels, model_id: int
+    ) -> Any:
         model = chain.first(model_id)
         return None if model is None else component_class(self._unit, model)
 
@@ -231,7 +242,7 @@ class FroniusInverter:
             meter=AcMeter(meter_unit, model),
         )
 
-    def _component(self, name: str):
+    def _component(self, name: str) -> Any:
         if name.startswith("meter_"):
             return self.meters[int(name.removeprefix("meter_"))].meter
         return getattr(self, name)
@@ -266,9 +277,11 @@ class FroniusInverter:
             await self._async_setup()
         per_unit: dict[int, dict[str, dict[int, int | bool]]] = {}
 
-        async def collect(unit_id: int, unit: ModbusUnit, components) -> None:
+        async def collect(
+            unit_id: int, unit: ModbusUnit, components: Sequence[Any]
+        ) -> None:
             chain = await _scan(unit)
-            common = Common(unit, chain.first(COMMON_MODEL_ID))
+            common = Common(unit, cast(SunSpecModel, chain.first(COMMON_MODEL_ID)))
             raw = per_unit.setdefault(unit_id, {})
             for component in (common, *components):
                 for space, words in (await component.async_read_raw()).items():
@@ -329,9 +342,10 @@ class FroniusInverter:
     @property
     def pv_power_w(self) -> float | None:
         """The sum of the PV channels' dcw, or None when none of them report a value."""
+        modules = [self.mppt_module(i) for i in self.mppt_channels.pv]
         values = [
-            self.mppt.module[i].dcw
-            for i in self.mppt_channels.pv
-            if self.mppt.module[i].dcw is not None
+            module.dcw
+            for module in modules
+            if module is not None and module.dcw is not None
         ]
         return round(sum(values), 2) if values else None

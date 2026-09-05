@@ -1,5 +1,6 @@
 """Constants, SunSpec state maps, and shared value-mapping helpers."""
 
+from collections.abc import Mapping
 import re
 
 DOMAIN = "fronius_modbus"
@@ -144,7 +145,7 @@ STORAGE_EXT_CONTROL_MODE = {
 }
 
 
-def _state_values(*mappings) -> list[str]:
+def _state_values(*mappings: Mapping[int, str]) -> list[str]:
     return list(
         dict.fromkeys(value for mapping in mappings for value in mapping.values())
     )
