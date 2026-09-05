@@ -32,7 +32,8 @@ LINE_LIMIT = 900
 # The entity table: one EntityDescription per entity, ~85 % declarative.
 LINE_BUDGETS = {
     # 1665 until the total sensor learned to follow a genuine counter reset.
-    "entities.py": 1688,
+    # 1688 until the reset counter learned to require consecutive lower polls.
+    "entities.py": 1691,
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to

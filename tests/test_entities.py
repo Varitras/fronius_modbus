@@ -193,3 +193,29 @@ async def test_a_total_sensor_follows_a_genuine_counter_reset(hass, entry, runti
     for _ in range(entities.TOTAL_INCREASING_RESET_POLLS - 1):
         assert sensor.native_value == 33187794.59
     assert sensor.native_value == 120.0
+
+
+async def test_a_total_sensor_reset_needs_consecutive_lower_polls(hass, entry, runtime):
+    """A missing poll between lower readings must not count toward a counter reset."""
+    description = _description(entities.sensor_descriptions(runtime), "acenergy")
+    sensor = entities.FroniusTotalSensor(runtime, entry, description)
+    sensor.hass = hass
+    assert sensor.native_value == 33187794.59
+
+    _report(sensor, 120.0)
+    assert sensor.native_value == 33187794.59
+    _report(sensor, None)
+    assert sensor.native_value == 33187794.59
+    _report(sensor, 120.0)
+    assert sensor.native_value == 33187794.59
+    _report(sensor, 120.0)
+    assert sensor.native_value == 33187794.59
+
+    # Three CONSECUTIVE lower polls, with no gap, still adopt the reset.
+    other_sensor = entities.FroniusTotalSensor(runtime, entry, description)
+    other_sensor.hass = hass
+    assert other_sensor.native_value == 33187794.59
+    _report(other_sensor, 120.0)
+    for _ in range(entities.TOTAL_INCREASING_RESET_POLLS - 1):
+        assert other_sensor.native_value == 33187794.59
+    assert other_sensor.native_value == 120.0

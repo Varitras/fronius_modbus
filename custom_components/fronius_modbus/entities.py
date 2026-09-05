@@ -1651,6 +1651,7 @@ class FroniusTotalSensor(FroniusEntity, RestoreSensor):
         """The description's value, unless it is missing, lower, or an implausible jump."""
         new_value = self.entity_description.value_fn(self._runtime)
         if new_value is None:
+            self._lower_values_seen = 0
             return self._last_value
         if self._last_value is not None:
             if new_value < self._last_value:
@@ -1682,6 +1683,7 @@ class FroniusTotalSensor(FroniusEntity, RestoreSensor):
                     TOTAL_INCREASING_MAX_STEP_WH,
                     self._last_value,
                 )
+                self._lower_values_seen = 0
                 return self._last_value
         self._lower_values_seen = 0
         self._last_value = new_value

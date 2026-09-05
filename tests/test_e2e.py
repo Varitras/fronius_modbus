@@ -259,6 +259,24 @@ async def test_v019_mppt_entities_are_renamed(hass, mock_modbus):
     )
 
 
+async def test_a_stale_entity_is_removed_after_a_clean_first_poll(hass, mock_modbus):
+    """An entity for a key the integration no longer creates is dropped on a clean poll."""
+    entry = make_entry(hass)
+    registry = er.async_get(hass)
+    unique_id = f"{entity_prefix(entry.entry_id)}_no_such_key"
+    registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        unique_id,
+        config_entry=entry,
+    )
+
+    await setup_entry(hass, entry)
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert registry.async_get_entity_id("sensor", DOMAIN, unique_id) is None
+
+
 async def test_a_shifted_sunspec_map_reloads_the_entry(hass, mock_modbus):
     entry = make_entry(hass)
     await setup_entry(hass, entry)

@@ -680,9 +680,11 @@ class FroniusWebControl:
                 "Technician credentials not configured — enter the technician password via Configure"
             )
         limit_w = int(round(value))
-        await self._async_tech_web_job(
+        result = await self._async_tech_web_job(
             self._technician_client.set_export_soft_limit, limit_w
         )
+        if not result:
+            return
         self.data.export_soft_limit_w = limit_w
         if self._coordinator is not None:
             self._coordinator.async_set_updated_data(replace(self.data))

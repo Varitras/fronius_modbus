@@ -89,5 +89,12 @@
     "old": "            soc_min = self.data.soc_min if modbus_reserve is None else modbus_reserve",
     "new": "            soc_min = self.data.soc_min",
     "tests": "switching_back_to_manual_keeps_the_modbus_reserve"
+  },
+  {
+    "label": "migrations: stale entities are only kept after a failed poll",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    if runtime.modbus.data.report.failed or web_refresh_failed:",
+    "new": "    if True:",
+    "tests": "stale_entity_is_removed_after_a_clean_first_poll"
   }
 ]

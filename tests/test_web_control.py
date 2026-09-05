@@ -184,6 +184,25 @@ async def test_the_export_soft_limit_is_shown_right_after_the_write(hass):
     assert pushed[-1].export_soft_limit_w == 4200
 
 
+async def test_a_rejected_technician_write_does_not_fake_the_limit(hass):
+    """An auth failure on the write must not leave the entity showing the unapplied value."""
+
+    class FakeRejectingTechnicianClient(FakeWebClient):
+        def set_export_soft_limit(self, watts):
+            raise FroniusWebAuthError("token rejected")
+
+    control = make_control(hass, technician_client=FakeRejectingTechnicianClient())
+    try:
+        await control.async_refresh()
+        await control.set_export_soft_limit_w(4200)
+    finally:
+        control.shutdown()
+
+    # The auth failure disables the technician client and clears the limit as
+    # unknown; the point under test is that it never becomes the rejected 4200.
+    assert control.data.export_soft_limit_w != 4200
+
+
 async def test_the_export_limit_needs_the_technician_client(control):
     with pytest.raises(RuntimeError, match="Technician"):
         await control.set_export_soft_limit_w(4200)
