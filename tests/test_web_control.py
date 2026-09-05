@@ -3,8 +3,11 @@
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.fronius_modbus.const import DOMAIN
+from custom_components.fronius_modbus.const import API_USERNAME, DOMAIN
+from custom_components.fronius_modbus.froniuswebclient import FroniusWebAuthError
+from custom_components.fronius_modbus.token_store import async_get_token_store
 from custom_components.fronius_modbus.web_control import FroniusWebControl
+from homeassistant.helpers import issue_registry as ir
 
 
 class FakeWebClient:
@@ -157,3 +160,57 @@ async def test_switching_back_to_manual_keeps_the_modbus_reserve(hass):
         control.shutdown()
 
     assert control._client.calls[-1] == ("battery", 1, 0, 7)
+
+
+async def test_the_export_soft_limit_is_shown_right_after_the_write(hass):
+    """The web API is only re-read minutes later; until then the entity must not lie."""
+
+    class FakeTechnicianClient(FakeWebClient):
+        def set_export_soft_limit(self, watts):
+            self.calls.append(("export", watts))
+            return True
+
+    pushed = []
+    control = make_control(hass, technician_client=FakeTechnicianClient())
+    control.attach_coordinator(
+        type("Coordinator", (), {"async_set_updated_data": pushed.append})()
+    )
+    try:
+        await control.set_export_soft_limit_w(4200.4)
+    finally:
+        control.shutdown()
+
+    assert control.data.export_soft_limit_w == 4200
+    assert pushed[-1].export_soft_limit_w == 4200
+
+
+async def test_the_export_limit_needs_the_technician_client(control):
+    with pytest.raises(RuntimeError, match="Technician"):
+        await control.set_export_soft_limit_w(4200)
+
+
+async def test_an_auth_failure_disables_the_web_api_and_deletes_the_token(hass):
+    """A rejected token must not be retried forever; the user has to reconfigure."""
+
+    class FakeAuthFailingClient(FakeWebClient):
+        def get_inverter_info(self):
+            raise FroniusWebAuthError("token rejected")
+
+    await async_get_token_store(hass).async_save_token(
+        "192.0.2.1", API_USERNAME, "stale-token"
+    )
+    control = make_control(hass, client=FakeAuthFailingClient())
+    try:
+        await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert control.configured is False
+    assert (
+        await async_get_token_store(hass).async_load_token("192.0.2.1", API_USERNAME)
+        is None
+    )
+    assert any(
+        issue.domain == DOMAIN and issue.issue_id.endswith(control._entry.entry_id)
+        for issue in ir.async_get(hass).issues.values()
+    )

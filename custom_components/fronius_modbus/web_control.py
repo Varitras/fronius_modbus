@@ -112,18 +112,6 @@ def _as_int(value: Any) -> int | None:
         return None
 
 
-def _require_whole_number(value: Any, field_name: str) -> int:
-    try:
-        numeric_value = float(value)
-    except (TypeError, ValueError) as err:
-        raise ValueError(f"{field_name} must be a whole number") from err
-
-    if not numeric_value.is_integer():
-        raise ValueError(f"{field_name} must be a whole number")
-
-    return int(numeric_value)
-
-
 def _enabled_state(value: Any) -> str:
     if isinstance(value, str):
         normalized = value.strip().lower()
@@ -284,6 +272,13 @@ class FroniusWebControl:
                 ) from err
             return None
 
+    async def _async_client_job(self, method_name: str, *args):
+        """Run one refresh step, re-reading the client: an auth failure clears it mid-refresh."""
+        client = self._client
+        if client is None:
+            return None
+        return await self._async_web_job(getattr(client, method_name), *args)
+
     async def _async_tech_web_job(self, func, *args):
         """Run a technician-client job; on auth failure clear only the technician client."""
         if not self._technician_client:
@@ -379,18 +374,18 @@ class FroniusWebControl:
         if not self._client:
             return replace(self.data)
 
-        inverter_info = await self._async_web_job(self._client.get_inverter_info)
+        inverter_info = await self._async_client_job("get_inverter_info")
         self.data.inverter_temperature = (
             inverter_info.get("temperature")
             if isinstance(inverter_info, dict)
             else None
         )
 
-        modbus_config = await self._async_web_job(self._client.get_modbus_config)
+        modbus_config = await self._async_client_job("get_modbus_config")
         if isinstance(modbus_config, dict):
             self._apply_web_modbus_config(modbus_config)
 
-        solar_api_config = await self._async_web_job(self._client.get_solar_api_config)
+        solar_api_config = await self._async_client_job("get_solar_api_config")
         if isinstance(solar_api_config, dict):
             enabled = solar_api_config.get("SolarAPIv1Enabled")
             self.data.solar_api_enabled = (
@@ -400,7 +395,7 @@ class FroniusWebControl:
             self.data.solar_api_enabled = None
 
         if self._storage_present:
-            storage_info = await self._async_web_job(self._client.get_storage_info)
+            storage_info = await self._async_client_job("get_storage_info")
             if isinstance(storage_info, dict):
                 self.data.storage_temperature = storage_info.get("cell_temperature")
                 self.data.storage_manufacturer = storage_info.get("manufacturer")
@@ -409,7 +404,7 @@ class FroniusWebControl:
             else:
                 self.data.storage_temperature = None
 
-            battery_config = await self._async_web_job(self._client.get_battery_config)
+            battery_config = await self._async_client_job("get_battery_config")
             if isinstance(battery_config, dict):
                 self._apply_web_battery_config(battery_config)
 
@@ -452,7 +447,7 @@ class FroniusWebControl:
                 if self._client:
                     await self.async_refresh()
                     if self._coordinator is not None:
-                        self._coordinator.async_set_updated_data(self.data)
+                        self._coordinator.async_set_updated_data(replace(self.data))
             except asyncio.CancelledError:
                 raise
             except Exception as err:
@@ -521,6 +516,10 @@ class FroniusWebControl:
             raise ValueError("Battery backup reserve must be between 5 and 100")
 
         return next_soc_min, next_soc_max, next_backup_reserved
+
+    def validate_soc_minimum(self, soc_min: int) -> None:
+        """Raise if the web API would reject this minimum, before anything is written."""
+        self._get_api_soc_values(soc_min=soc_min)
 
     def _require_battery_mode_manual(self, control_name: str) -> None:
         if not self.battery_mode_is_manual:
@@ -680,6 +679,10 @@ class FroniusWebControl:
             raise RuntimeError(
                 "Technician credentials not configured — enter the technician password via Configure"
             )
+        limit_w = int(round(value))
         await self._async_tech_web_job(
-            self._technician_client.set_export_soft_limit, int(round(value))
+            self._technician_client.set_export_soft_limit, limit_w
         )
+        self.data.export_soft_limit_w = limit_w
+        if self._coordinator is not None:
+            self._coordinator.async_set_updated_data(replace(self.data))

@@ -1,5 +1,6 @@
 """Entity descriptions read against a real runtime, and the total-sensor behaviour."""
 
+from dataclasses import replace
 from datetime import timedelta
 
 from modbus_connection import ModbusTimeoutError
@@ -16,6 +17,7 @@ from custom_components.fronius_modbus.fronius_modbus_api.device import FroniusIn
 from custom_components.fronius_modbus.sensor import FroniusSensor
 
 from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID
+from .test_web_control import make_control
 
 
 @pytest.fixture
@@ -159,3 +161,24 @@ async def test_an_entity_without_placeholders_does_not_crash_on_its_name(
 
     assert isinstance(entity.translation_placeholders, dict)
     assert entity.has_entity_name is True
+
+
+async def test_an_invalid_soc_minimum_writes_nothing(hass, entry, connection):
+    """Modbus and the web API must not end up disagreeing about the reserve."""
+    runtime = await make_runtime(hass, entry, connection)
+    web_control = make_control(hass)
+    web_control._client.battery.update(
+        HYB_EM_MODE=1, BAT_M0_SOC_MODE="manual", BAT_M0_SOC_MAX=20
+    )
+    await web_control.async_refresh()
+    runtime = replace(runtime, web_control=web_control)
+
+    writes = []
+    connection.for_unit(INVERTER_UNIT_ID).on_write(writes.append)
+    try:
+        with pytest.raises(ValueError):
+            await entities._set_soc_minimum(runtime, 50)
+    finally:
+        web_control.shutdown()
+
+    assert writes == []

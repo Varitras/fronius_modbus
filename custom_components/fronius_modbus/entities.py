@@ -1143,13 +1143,18 @@ def _storage_percent_number(
 async def _set_soc_minimum(runtime: FroniusRuntimeData, value: float) -> None:
     """Write the SoC minimum to Modbus, then mirror it to the web API in Manual mode."""
     percent = int(round(value))
-    await runtime.storage_control.set_minimum_reserve(percent)
     web_control = runtime.web_control
-    if (
+    mirror_to_web = (
         web_control is not None
         and web_control.configured
         and web_control.battery_mode_is_manual
-    ):
+    )
+    # A minimum the web API refuses must not reach Modbus either: the two would
+    # otherwise disagree, with the reserve only half applied.
+    if mirror_to_web:
+        web_control.validate_soc_minimum(percent)
+    await runtime.storage_control.set_minimum_reserve(percent)
+    if mirror_to_web:
         await web_control.set_soc_minimum_manual(percent)
 
 
