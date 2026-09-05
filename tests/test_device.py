@@ -125,3 +125,25 @@ async def test_raw_diagnostics_drop_the_serial_number(device):
         and 40067 not in raw[INVERTER_UNIT_ID]["holding"]
     )
     assert raw[INVERTER_UNIT_ID]["holding"][40002] == 1
+
+
+async def test_mppt_channels_are_classified_by_their_label(device):
+    await device.async_update()
+    channels = device.mppt_channels
+    assert channels.pv == (0, 1)
+    assert (channels.charge, channels.discharge) == (2, 3)
+    assert device.pv_power_w == 3123.6
+
+
+async def test_unlabelled_channels_fall_back_to_the_last_two_for_storage(
+    connection, symo_gen24
+):
+    holding = dict(symo_gen24[1]["holding"])
+    for module in range(4):  # blank every id_str (8 words from header+11+20*module)
+        for word in range(8):
+            holding[40253 + 11 + 20 * module + word] = 0
+    connection.for_unit(1).load_raw({"holding": holding})
+    device = FroniusInverter(connection.for_unit(1), 1, {})
+    await device.async_update()
+    assert device.mppt_channels.pv == (0, 1)
+    assert (device.mppt_channels.charge, device.mppt_channels.discharge) == (2, 3)

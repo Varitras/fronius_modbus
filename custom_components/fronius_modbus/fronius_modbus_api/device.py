@@ -35,6 +35,7 @@ from .sunspec_models import (
     Controls,
     Inverter,
     Mppt,
+    MpptModule,
     Nameplate,
     Settings,
     Status,
@@ -51,6 +52,21 @@ REPORT_CONTROLS = "controls"
 REPORT_MPPT = "mppt"
 REPORT_STORAGE = "storage"
 OHM_PER_MEGAOHM = 1_000_000
+PV_LABEL = "MPPT"
+CHARGE_LABEL = "STCHA"
+DISCHARGE_LABEL = "STDISCHA"
+
+
+@dataclass(frozen=True)
+class MpptChannels:
+    """Which model-160 modules are PV strings and which are the storage paths."""
+
+    pv: tuple[int, ...]
+    charge: int | None
+    discharge: int | None
+
+
+EMPTY_CHANNELS = MpptChannels(pv=(), charge=None, discharge=None)
 
 
 def meter_report_name(unit_id: int) -> str:
@@ -275,3 +291,47 @@ class FroniusInverter:
         if self.status is None or self.status.ris is None:
             return None
         return round(self.status.ris / OHM_PER_MEGAOHM, 3)
+
+    def mppt_module(self, index: int) -> MpptModule | None:
+        """The module at ``index``, or None when there is no MPPT model or index."""
+        if self.mppt is None or index >= len(self.mppt.module):
+            return None
+        return self.mppt.module[index]
+
+    @property
+    def mppt_channels(self) -> MpptChannels:
+        """Classify the model-160 modules from the last poll by their label."""
+        if self.mppt is None:
+            return EMPTY_CHANNELS
+        labels = [
+            (module.id_str or "").replace(" ", "").upper()
+            for module in self.mppt.module
+        ]
+        charge = next(
+            (i for i, label in enumerate(labels) if label.startswith(CHARGE_LABEL)),
+            None,
+        )
+        discharge = next(
+            (i for i, label in enumerate(labels) if DISCHARGE_LABEL in label), None
+        )
+        # Older firmware ships no labels; the storage paths are then the last two modules.
+        if (
+            self.storage is not None
+            and (charge is None or discharge is None)
+            and len(labels) >= 4
+        ):
+            charge, discharge = len(labels) - 2, len(labels) - 1
+        pv = tuple(i for i, label in enumerate(labels) if PV_LABEL in label)
+        if not pv:
+            pv = tuple(i for i in range(len(labels)) if i not in (charge, discharge))
+        return MpptChannels(pv=pv, charge=charge, discharge=discharge)
+
+    @property
+    def pv_power_w(self) -> float | None:
+        """The sum of the PV channels' dcw, or None when none of them report a value."""
+        values = [
+            self.mppt.module[i].dcw
+            for i in self.mppt_channels.pv
+            if self.mppt.module[i].dcw is not None
+        ]
+        return round(sum(values), 2) if values else None
