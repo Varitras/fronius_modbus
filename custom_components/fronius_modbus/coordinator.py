@@ -99,6 +99,7 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
         self._failed: frozenset[str] = frozenset()
         self._timeouts = 0
         self._tolerate_until = 0.0
+        self._tolerated_failures = 0
 
     def tolerate_failures_until(self, monotonic_deadline: float) -> None:
         """Keep the last values through the outage a web battery write causes."""
@@ -115,10 +116,12 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             if self._timeouts >= TIMEOUTS_BEFORE_RECYCLE:
                 await self.device.unit.disconnect()
                 self._timeouts = 0
-            return self._failed_poll(err)
+            return await self._failed_poll(err)
         except ModbusError as err:
-            return self._failed_poll(err)
+            return await self._failed_poll(err)
         self._timeouts = 0
+        self._tolerate_until = 0.0
+        self._tolerated_failures = 0
         if not report.updated:
             raise UpdateFailed("no sub-system answered")
         for name in sorted(report.failed.keys() - self._failed):
@@ -131,10 +134,20 @@ class FroniusModbusCoordinator(DataUpdateCoordinator[ModbusPoll]):
             grid_status=self._grid_status(report),
         )
 
-    def _failed_poll(self, err: ModbusError) -> ModbusPoll:
+    async def _failed_poll(self, err: ModbusError) -> ModbusPoll:
         if self.data is not None and time.monotonic() < self._tolerate_until:
-            _LOGGER.debug("Modbus outage tolerated after a web write: %s", err)
+            log = _LOGGER.warning if self._tolerated_failures == 0 else _LOGGER.debug
+            log("Modbus outage tolerated after a web write: %s", err)
+            self._tolerated_failures += 1
             return self.data
+        if self._tolerated_failures:
+            # 0.3 closed the client when the window opened. The connection is
+            # shared with the rest of Home Assistant now, so it may not be
+            # dropped preemptively - recycle it once the window ends still
+            # failing, which is when a stale socket is the likely cause.
+            self._tolerated_failures = 0
+            self._tolerate_until = 0.0
+            await self.device.unit.disconnect()
         raise UpdateFailed(f"Modbus communication failure: {err}") from err
 
     def _build_controls(self) -> None:

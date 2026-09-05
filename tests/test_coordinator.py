@@ -1,6 +1,8 @@
 """The Modbus coordinator turns the device's report into entity data, and fails the right way."""
 
+import asyncio
 from datetime import timedelta
+import time
 from unittest.mock import MagicMock
 
 from modbus_connection import ModbusConnectionError, ModbusTimeoutError
@@ -105,3 +107,30 @@ async def test_failures_outside_the_write_window_are_not_tolerated(
 
     with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()
+
+
+async def test_a_successful_poll_ends_the_tolerance_window(coordinator, inverter_unit):
+    """A window left open after the link recovered would swallow the next real outage."""
+    coordinator.data = await coordinator._async_update_data()
+    coordinator.tolerate_failures_until(10**9)
+    await coordinator._async_update_data()
+
+    inverter_unit.fail_requests(ModbusConnectionError())
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+
+async def test_the_link_is_recycled_when_the_window_expires_failing(
+    coordinator, inverter_unit, connection
+):
+    """A socket that outlived the inverter's restart answers nothing until it is reopened."""
+    coordinator.data = await coordinator._async_update_data()
+    coordinator.tolerate_failures_until(time.monotonic() + 0.05)
+    inverter_unit.fail_requests(ModbusConnectionError())
+    assert await coordinator._async_update_data() is coordinator.data
+
+    await asyncio.sleep(0.1)
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+    assert connection.connected is False
