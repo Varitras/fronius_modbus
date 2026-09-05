@@ -32,6 +32,9 @@ _TRANSLATION_CACHE: dict[str, dict] = {}
 
 _TARGET_VERSION = 1
 _TARGET_MINOR_VERSION = 10
+# Entries below this minor version predate the web API integration and still
+# carry the dropped meter-unit config, so only they need the data migration.
+_WEB_API_MINOR_VERSION = 9
 
 _LEGACY_METER_DEVICE_RE = re.compile(r".*_meter_?\d+")
 _V019_MPPT_UNIQUE_ID_MAPPINGS = (
@@ -206,24 +209,31 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return False
 
     if entry.version == _TARGET_VERSION and entry.minor_version < _TARGET_MINOR_VERSION:
-        new_data = dict(entry.data)
-        new_options = dict(entry.options)
+        if entry.minor_version < _WEB_API_MINOR_VERSION:
+            new_data = dict(entry.data)
+            new_options = dict(entry.options)
 
-        new_data.pop(CONF_METER_UNIT_ID, None)
-        new_data.pop(CONF_METER_UNIT_IDS, None)
-        new_options.pop(CONF_METER_UNIT_ID, None)
-        new_options.pop(CONF_METER_UNIT_IDS, None)
-        new_data[CONF_RECONFIGURE_REQUIRED] = True
-        new_options[CONF_RECONFIGURE_REQUIRED] = True
+            new_data.pop(CONF_METER_UNIT_ID, None)
+            new_data.pop(CONF_METER_UNIT_IDS, None)
+            new_options.pop(CONF_METER_UNIT_ID, None)
+            new_options.pop(CONF_METER_UNIT_IDS, None)
+            new_data[CONF_RECONFIGURE_REQUIRED] = True
+            new_options[CONF_RECONFIGURE_REQUIRED] = True
 
-        hass.config_entries.async_update_entry(
-            entry,
-            data=new_data,
-            options=new_options,
-            version=_TARGET_VERSION,
-            minor_version=_TARGET_MINOR_VERSION,
-            title=_updated_entry_title(entry),
-        )
+            hass.config_entries.async_update_entry(
+                entry,
+                data=new_data,
+                options=new_options,
+                version=_TARGET_VERSION,
+                minor_version=_TARGET_MINOR_VERSION,
+                title=_updated_entry_title(entry),
+            )
+        else:
+            hass.config_entries.async_update_entry(
+                entry,
+                version=_TARGET_VERSION,
+                minor_version=_TARGET_MINOR_VERSION,
+            )
 
     return True
 

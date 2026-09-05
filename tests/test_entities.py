@@ -13,6 +13,7 @@ from custom_components.fronius_modbus.coordinator import (
     FroniusRuntimeData,
 )
 from custom_components.fronius_modbus.fronius_modbus_api.device import FroniusInverter
+from custom_components.fronius_modbus.sensor import FroniusSensor
 
 from .conftest import INVERTER_UNIT_ID, METER_UNIT_ID
 
@@ -142,3 +143,17 @@ async def test_a_total_sensor_accepts_a_plausible_higher_value(hass, entry, runt
     higher = 33187794.59 + entities.TOTAL_INCREASING_MAX_STEP_WH - 1
     object.__setattr__(description, "value_fn", lambda r: higher)
     assert sensor.native_value == higher
+
+
+async def test_an_entity_without_placeholders_does_not_crash_on_its_name(
+    hass, entry, runtime
+):
+    """A description with no translation_placeholders must not touch the attribute HA owns."""
+    description = _description(entities.sensor_descriptions(runtime), "acpower")
+    assert description.translation_placeholders is None
+
+    entity = FroniusSensor.create(runtime, entry, description)
+    entity.hass = hass
+
+    assert isinstance(entity.translation_placeholders, dict)
+    assert entity.has_entity_name is True

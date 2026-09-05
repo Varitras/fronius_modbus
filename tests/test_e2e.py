@@ -4,7 +4,18 @@ from modbus_connection import ModbusConnectionError, ModbusTimeoutError
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.fronius_modbus.const import DOMAIN, entity_prefix, instance_key
+from custom_components import fronius_modbus
+from custom_components.fronius_modbus import migrations
+from custom_components.fronius_modbus.const import (
+    CONF_RECONFIGURE_REQUIRED,
+    DOMAIN,
+    entity_prefix,
+    instance_key,
+)
+from custom_components.fronius_modbus.diagnostics import (
+    async_get_config_entry_diagnostics,
+)
+from custom_components.fronius_modbus.token_store import async_get_token_store
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
@@ -201,10 +212,21 @@ async def test_the_select_changes_the_storage_mode(hass, mock_modbus):
 
 async def test_minor_version_9_entries_migrate_to_10(hass, mock_modbus):
     entry = make_entry(hass, minor_version=9)
-    await setup_entry(hass, entry)
+    title_before = entry.title
 
-    assert entry.state is ConfigEntryState.LOADED
+    # Assert on the migration step alone: async_setup_entry's own token check
+    # (unrelated to this migration) would add CONF_RECONFIGURE_REQUIRED anyway
+    # for an entry with no stored token, masking what the migration itself did.
+    assert await migrations.async_migrate_entry(hass, entry)
+
     assert entry.minor_version == 10
+    # Minor 9 entries are already on the web-API shape: only the version bump
+    # is expected, not the pre-web-API data migration.
+    assert CONF_RECONFIGURE_REQUIRED not in entry.data
+    assert entry.title == title_before
+
+    await setup_entry(hass, entry)
+    assert entry.state is ConfigEntryState.LOADED
 
 
 async def test_v019_mppt_entities_are_renamed(hass, mock_modbus):
@@ -252,3 +274,47 @@ async def test_options_change_reloads_with_the_new_interval(hass, mock_modbus):
     await hass.async_block_till_done()
 
     assert entry.runtime_data.modbus.update_interval.total_seconds() == 30
+
+
+class _FakeWebClientDownAfterMeterInfo:
+    """A web client whose meter-info call succeeds but everything else is down."""
+
+    def __init__(self, *_args, **_kwargs) -> None:
+        pass
+
+    def get_power_meter_info(self, *_args, **_kwargs):
+        return None
+
+    def __getattr__(self, name: str):
+        def _raise(*_args, **_kwargs):
+            raise RuntimeError("down")
+
+        return _raise
+
+
+async def test_a_web_api_outage_does_not_block_the_modbus_entities(
+    hass, mock_modbus, monkeypatch
+):
+    entry = make_entry(hass)
+    await async_get_token_store(hass).async_save_token(HOST, realm="r", token="t")
+    monkeypatch.setattr(
+        fronius_modbus, "FroniusWebClient", _FakeWebClientDownAfterMeterInfo
+    )
+
+    await setup_entry(hass, entry)
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert state_of(hass, entry, "acpower") == "3075.1"
+    assert state_of(hass, entry, "inverter_temperature") == "unavailable"
+
+
+async def test_diagnostics_redact_the_serial_numbers(hass, mock_modbus):
+    entry = make_entry(hass)
+    await setup_entry(hass, entry)
+
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    assert result["identity"]["serial"] == "**REDACTED**"
+    registers_unit_1 = result["registers"]["1"]["holding"]
+    assert not (set(registers_unit_1) & {str(a) for a in range(40052, 40068)})
+    assert "inverter" in result["updated"]

@@ -61,6 +61,7 @@ async def test_the_config_flow_creates_an_entry(hass, mock_modbus):
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == "Fronius 192.0.2.10"
     assert result["data"]["host"] == HOST
+    assert result["minor_version"] == 10
 
 
 async def test_a_second_flow_for_the_same_host_aborts(hass, mock_modbus):

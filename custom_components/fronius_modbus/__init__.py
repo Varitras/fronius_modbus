@@ -91,7 +91,11 @@ async def _async_meter_topology(
         )
         return None, meter_unit_ids, primary, locations
     except Exception as err:
-        _LOGGER.warning("Could not read the meter topology from the web API: %s", err)
+        _LOGGER.warning(
+            "Could not read the meter topology from the web API: %s",
+            err,
+            exc_info=True,
+        )
         return client, meter_unit_ids, primary, locations
 
     if info and info.get("unit_ids"):
@@ -176,8 +180,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
             hass, entry, web_control, interval=timedelta(seconds=web_scan_interval)
         )
         web_control.attach_coordinator(web)
-        await web.async_config_entry_first_refresh()
         entry.async_on_unload(web_control.shutdown)
+        # A web-API outage must not block setup: refresh (not first_refresh) so
+        # web entities come up unavailable while Modbus entities still load.
+        await web.async_refresh()
 
     entry.runtime_data = FroniusRuntimeData(
         device=device,
