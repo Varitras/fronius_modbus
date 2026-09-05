@@ -13,6 +13,7 @@
 - The Web API is polled on its own interval instead of once per Modbus poll, so a slow or unreachable Web API no longer stalls the Modbus poll or blocks the Modbus entities.
 - A firmware update that shifts the inverter's SunSpec model chain now reloads the config entry automatically.
 - Grid charge power now scales by the charge maximum and grid discharge power by the discharge maximum. 0.3 wrote each of them against the opposite register's maximum while displaying it with this one, so a written watt value and the value shown back differed whenever the two maxima did.
+- The storage energy rating sensor no longer claims the measurement state class.
 
 ### Added
 

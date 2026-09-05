@@ -5,6 +5,7 @@ import pathlib
 from unittest.mock import MagicMock
 
 from custom_components.fronius_modbus import entities
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 
 TESTS = pathlib.Path(__file__).resolve().parent
 PACKAGE = TESTS.parents[0] / "custom_components" / "fronius_modbus"
@@ -66,3 +67,12 @@ def test_every_translation_key_has_a_name_in_every_language():
                 assert "name" in translations[platform].get(
                     description.translation_key, {}
                 ), (language, platform, description.translation_key)
+
+
+def test_no_energy_sensor_uses_the_measurement_state_class():
+    runtime = _everything_present()
+    for description in entities.sensor_descriptions(runtime):
+        if description.device_class == SensorDeviceClass.ENERGY:
+            assert description.state_class != SensorStateClass.MEASUREMENT, (
+                description.key
+            )

@@ -804,7 +804,6 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         value_fn=lambda r: r.device.nameplate.wh_rtg,
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.MEASUREMENT,
         unit="Wh",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
