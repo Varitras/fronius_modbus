@@ -16,6 +16,18 @@ It can use the authenticated Fronius web API for setup assistance and battery co
 > [!IMPORTANT]
 > Its recommended to keep the inverter up to date, this integration will only be tested on recent firmwares. It is suggested to update your GEN24 inverter firmware to 1.40.0 or higher as issues have been reported in earlier firmwares of the Solar API caused multiple outages on GEN24 inverters. As of Mar 26, this firmware update has limited availability, so other areas might take longer.
 
+## What changed in 1.0
+
+- **Minimum Home Assistant version: 2026.9.0.**
+- The integration no longer opens its own Modbus TCP connection. It now asks Home Assistant's built-in `modbus` integration for a unit on a shared connection (`async_get_unit`), so it can coexist with other integrations talking to the same inverter without pymodbus version conflicts.
+- The register map is discovered at runtime via SunSpec model walking (through the `modbus-connection` library) instead of a hand-written pymodbus client and fixed register list: models 1, 101/103, 120, 121, 122, 123, 124, 160, and 201-204 are read from the model chain. Battery storage entities appear if and only if model 124 is present, and smart meter phase count is derived from the meter model id.
+- Per-value plausibility bounds are gone; SunSpec sentinel values and scale factors are decoded by the library instead.
+- The Web API is now polled on its own interval (new option, see below) instead of once per Modbus poll. A slow or unreachable Web API no longer stalls the Modbus poll or blocks the Modbus entities.
+- New option: **"Web API update interval (seconds)"** (default 60), separate from the Modbus poll interval.
+- Diagnostics download (Settings -> Devices -> device -> Download diagnostics) now includes the raw SunSpec register map, with serial numbers redacted.
+- If a firmware update changes the inverter's SunSpec model chain, the integration reloads the config entry automatically.
+- Entity IDs, unique IDs, history/statistics, and existing options are unaffected by this change; storage modes, the AC-limit/power-factor enable pulse, and the battery API controls behave the same as before.
+
 # Installation
 
 ## HACS installation
@@ -23,7 +35,7 @@ It can use the authenticated Fronius web API for setup assistance and battery co
 - Go to HACS
 - Click on the 3 dots in the top right corner.
 - Select "Custom repositories"
-- Add the [URL](https://github.com/callifo/fronius_modbus) to the repository.
+- Add the [URL](https://github.com/Varitras/fronius_modbus) to the repository.
 - Select the 'integration' type.
 - Click the "ADD" button.
 
@@ -58,9 +70,6 @@ If an entry has no valid stored Web API token for the configured host, Home Assi
 ## Charging From Grid
 
 Turn off scheduled (dis)charging in the web UI to avoid unexpected behavior.
-
-> [!IMPORTANT]
-> When using multiple integrations that use pymodbus package it can lead to version conflicts as they will share 1 package in HA. This can be fixed by removing ALL integrations using pymodbus and modbus configuratio.yaml (for the build in integration into HA), rebooting HA and then reinstalling the integrations and the modbus configuration yaml.
 
 # Usage
 
@@ -193,3 +202,11 @@ Inverter
 - https://www.fronius.com/~/downloads/Solar%20Energy/Operating%20Instructions/42,0410,2649.pdf
 - https://github.com/binsentsu/home-assistant-solaredge-modbus/
 - https://github.com/bigramonk/byd_charging
+
+# Development
+
+Development happens against a WSL2 Home Assistant test environment; the integration itself only needs a recent Home Assistant.
+
+- `.github/scripts/check.sh` runs every gate CI also runs: ruff, mypy, pytest with a coverage gate, and a mutation run. Run it (or at least `pytest tests/ -q`) before calling a change done.
+- The default `pytest tests/ -q` run skips the end-to-end tests. Pass `-m ""` to include them.
+- `tests/fixtures/symo_gen24_fw1386.json` is a captured SunSpec register map from a Fronius Symo GEN24 10.0 running firmware 1.38.6-1. To capture a fixture from another inverter/firmware combination: download diagnostics for the integration's device (Settings -> Devices -> device -> Download diagnostics), take the `registers` array, prepend the SunSpec marker registers (40000/40001, `"SunS"`) and append the end-of-chain header (a model id of `0xFFFF`) if the diagnostics dump doesn't already include them, and blank out the serial number words before committing the fixture.
