@@ -98,16 +98,15 @@ class FroniusDisableSolarApiRepairFlow(RepairsFlow):
             self._resolve_issue()
             return self.async_create_entry(title="", data={})
 
-        hub = getattr(entry, "runtime_data", None)
-        if hub is None or not getattr(hub, "web_api_configured", False):
+        runtime = getattr(entry, "runtime_data", None)
+        web_control = None if runtime is None else runtime.web_control
+        if web_control is None or not web_control.configured or runtime.web is None:
             raise RuntimeError("Fronius Web API is not configured")
 
-        await hub.set_solar_api_enabled(False)
-        await hub.refresh_web_data()
-        if not hub.web_api_configured or hub.data.get("api_solar_api_enabled") is not False:
+        await web_control.set_solar_api_enabled(False)
+        await runtime.web.async_refresh()
+        if runtime.web.data.solar_api_enabled is not False:
             raise RuntimeError("Solar API disable could not be confirmed")
-        if hub.coordinator is not None:
-            hub.coordinator.async_set_updated_data(hub.data)
         self._resolve_issue()
         return self.async_create_entry(title="", data={})
 
@@ -164,11 +163,17 @@ async def async_create_fix_flow(
 ) -> RepairsFlow:
     """Create fix flow for a Fronius repairs issue."""
     if issue_id.startswith(SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX):
-        entry_id = str((data or {}).get("entry_id") or issue_id.removeprefix(SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX))
+        entry_id = str(
+            (data or {}).get("entry_id")
+            or issue_id.removeprefix(SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX)
+        )
         return FroniusDisableSolarApiRepairFlow(entry_id)
 
     if not issue_id.startswith(MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX):
         raise ValueError(f"Unknown issue: {issue_id}")
 
-    entry_id = str((data or {}).get("entry_id") or issue_id.removeprefix(MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX))
+    entry_id = str(
+        (data or {}).get("entry_id")
+        or issue_id.removeprefix(MIGRATION_RECONFIGURE_ISSUE_ID_PREFIX)
+    )
     return FroniusReconfigureRepairFlow(entry_id)

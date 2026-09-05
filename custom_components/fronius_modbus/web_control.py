@@ -67,7 +67,7 @@ class WebData:
 
 
 def _export_limit_summary(config: dict[str, Any] | None) -> dict[str, Any]:
-    """Distill the export-limit payload for change-logging (hub._export_limit_summary)."""
+    """Distill the export-limit payload for change-logging."""
     if not isinstance(config, dict) or not config:
         return {"available": False}
 

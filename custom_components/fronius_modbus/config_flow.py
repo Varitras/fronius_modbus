@@ -1,15 +1,23 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
+from modbus_connection import ModbusError, ModbusTcpParams
 import voluptuous as vol
 
-from homeassistant import config_entries, exceptions
+from homeassistant import config_entries, data_entry_flow, exceptions
+from homeassistant.components.modbus import async_get_temporary_unit
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.selector import TextSelector, TextSelectorConfig, TextSelectorType
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.selector import (
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+)
 
 from .const import (
     CONF_API_PASSWORD,
@@ -18,21 +26,25 @@ from .const import (
     CONF_INVERTER_UNIT_ID,
     CONF_RECONFIGURE_REQUIRED,
     CONF_RESTRICT_MODBUS_TO_THIS_IP,
+    CONF_WEB_SCAN_INTERVAL,
     DEFAULT_AUTO_ENABLE_MODBUS,
     DEFAULT_INVERTER_UNIT_ID,
+    DEFAULT_METER_UNIT_ID,
     DEFAULT_METER_UNIT_IDS,
     DEFAULT_NAME,
     DEFAULT_PORT,
     DEFAULT_RESTRICT_MODBUS_TO_THIS_IP,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_WEB_SCAN_INTERVAL,
     DOMAIN,
+    MINIMUM_SCAN_INTERVAL,
     API_USERNAME,
     TECHNICIAN_USERNAME,
     SUPPORTED_MANUFACTURERS,
     SUPPORTED_MODELS,
 )
-from .froniuswebclient import ClientIpResolutionError, mint_token
-from .hub import Hub
+from .fronius_modbus_api.device import FroniusInverter
+from .froniuswebclient import ClientIpResolutionError, FroniusWebClient, mint_token
 from .token_store import async_get_token_store
 
 _LOGGER = logging.getLogger(__name__)
@@ -70,6 +82,7 @@ class _UnsupportedHardware(exceptions.HomeAssistantError):
 class _AddressesNotUnique(exceptions.HomeAssistantError):
     """Error to indicate that the modbus addresses are not unique."""
 
+
 class _ScanIntervalTooShort(exceptions.HomeAssistantError):
     """Error to indicate the scan interval is too short."""
 
@@ -93,6 +106,7 @@ def _default_payload() -> dict[str, Any]:
         CONF_PORT: DEFAULT_PORT,
         CONF_INVERTER_UNIT_ID: DEFAULT_INVERTER_UNIT_ID,
         CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
+        CONF_WEB_SCAN_INTERVAL: DEFAULT_WEB_SCAN_INTERVAL,
         CONF_API_USERNAME: API_USERNAME,
         CONF_AUTO_ENABLE_MODBUS: DEFAULT_AUTO_ENABLE_MODBUS,
         CONF_RESTRICT_MODBUS_TO_THIS_IP: DEFAULT_RESTRICT_MODBUS_TO_THIS_IP,
@@ -116,6 +130,9 @@ def _expand_settings_input(
             payload[CONF_RESTRICT_MODBUS_TO_THIS_IP],
         )
     )
+    payload[CONF_WEB_SCAN_INTERVAL] = int(
+        user_input.get(CONF_WEB_SCAN_INTERVAL, payload[CONF_WEB_SCAN_INTERVAL])
+    )
     payload[CONF_API_USERNAME] = API_USERNAME
     payload.pop(CONF_API_PASSWORD, None)
     payload.pop("meter_modbus_unit_id", None)
@@ -123,7 +140,9 @@ def _expand_settings_input(
     return payload
 
 
-def _entry_payload(data: dict[str, Any], *, reconfigure_required: bool) -> dict[str, Any]:
+def _entry_payload(
+    data: dict[str, Any], *, reconfigure_required: bool
+) -> dict[str, Any]:
     payload = dict(data)
     payload.pop(CONF_API_PASSWORD, None)
     payload.pop("meter_modbus_unit_id", None)
@@ -148,7 +167,7 @@ def entry_defaults(entry: config_entries.ConfigEntry) -> dict[str, Any]:
         defaults[CONF_SCAN_INTERVAL] = int(
             defaults.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
         )
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         defaults[CONF_SCAN_INTERVAL] = DEFAULT_SCAN_INTERVAL
     return _expand_settings_input({}, defaults)
 
@@ -161,6 +180,10 @@ def _build_settings_schema(defaults: dict[str, Any]) -> vol.Schema:
                 CONF_SCAN_INTERVAL,
                 default=defaults.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
             ): vol.Coerce(int),
+            vol.Required(
+                CONF_WEB_SCAN_INTERVAL,
+                default=defaults.get(CONF_WEB_SCAN_INTERVAL, DEFAULT_WEB_SCAN_INTERVAL),
+            ): vol.All(vol.Coerce(int), vol.Range(min=MINIMUM_SCAN_INTERVAL, max=3600)),
             vol.Required(
                 CONF_RESTRICT_MODBUS_TO_THIS_IP,
                 default=defaults.get(
@@ -220,7 +243,7 @@ def _validate_static_input(data: dict[str, Any]) -> None:
         raise _InvalidHost
     if data[CONF_PORT] > 65535:
         raise _InvalidPort
-    if data[CONF_SCAN_INTERVAL] < 5:
+    if data[CONF_SCAN_INTERVAL] < MINIMUM_SCAN_INTERVAL:
         raise _ScanIntervalTooShort
 
     all_addresses = [DEFAULT_METER_UNIT_IDS[0], data[CONF_INVERTER_UNIT_ID]]
@@ -253,7 +276,9 @@ async def _async_load_token(hass: HomeAssistant, host: str) -> dict[str, str] | 
     return await async_get_token_store(hass).async_load_token(host, API_USERNAME)
 
 
-async def _async_save_token(hass: HomeAssistant, host: str, token: dict[str, str]) -> None:
+async def _async_save_token(
+    hass: HomeAssistant, host: str, token: dict[str, str]
+) -> None:
     await async_get_token_store(hass).async_save_token(
         host,
         realm=token["realm"],
@@ -308,55 +333,46 @@ async def _validate_input(
     if not api_password and api_token is None:
         raise _MissingApiPassword
 
-    hub = Hub(
-        hass,
-        data[CONF_NAME],
-        data[CONF_HOST],
-        data[CONF_PORT],
-        data[CONF_INVERTER_UNIT_ID],
-        list(DEFAULT_METER_UNIT_IDS),
-        data[CONF_SCAN_INTERVAL],
-        api_username=API_USERNAME,
-        api_password=api_password or None,
-        api_token=api_token,
-        auto_enable_modbus=data.get(CONF_AUTO_ENABLE_MODBUS, DEFAULT_AUTO_ENABLE_MODBUS),
-        restrict_modbus_to_this_ip=data.get(
-            CONF_RESTRICT_MODBUS_TO_THIS_IP,
-            DEFAULT_RESTRICT_MODBUS_TO_THIS_IP,
-        ),
+    client = FroniusWebClient(
+        host=data[CONF_HOST],
+        username=API_USERNAME,
+        password=api_password or "",
+        token=api_token,
     )
     try:
-        if not await hub.validate_web_api():
+        if not await hass.async_add_executor_job(client.login):
             raise _InvalidApiCredentials
-        await hub.init_data(
-            setup_coordinator=False,
-            apply_modbus_config=apply_modbus_config,
-        )
-    except ClientIpResolutionError:
-        raise _CannotResolveLocalIp
+        if apply_modbus_config and data.get(
+            CONF_AUTO_ENABLE_MODBUS, DEFAULT_AUTO_ENABLE_MODBUS
+        ):
+            await hass.async_add_executor_job(
+                client.ensure_modbus_enabled,
+                data[CONF_PORT],
+                DEFAULT_METER_UNIT_ID,
+                data[CONF_INVERTER_UNIT_ID],
+                data[CONF_RESTRICT_MODBUS_TO_THIS_IP],
+            )
+            # The inverter restarts its Modbus server after the settings write.
+            await asyncio.sleep(1.0)
+        async with async_get_temporary_unit(
+            hass,
+            ModbusTcpParams(host=data[CONF_HOST], port=data[CONF_PORT]),
+            data[CONF_INVERTER_UNIT_ID],
+        ) as unit:
+            identity = await FroniusInverter.async_probe(unit)
+    except ClientIpResolutionError as err:
+        raise _CannotResolveLocalIp from err
     except _InvalidApiCredentials:
         raise
-    except Exception as err:
-        _LOGGER.error("Cannot start hub %s", err)
+    except (ModbusError, HomeAssistantError, OSError, TimeoutError) as err:
+        _LOGGER.error("Cannot reach inverter: %s", err)
         raise _CannotConnect from err
-    finally:
-        hub.close()
 
-    manufacturer = hub.data.get("i_manufacturer")
-    if manufacturer is None:
-        _LOGGER.error("No manufacturer is returned")
+    if identity.manufacturer not in SUPPORTED_MANUFACTURERS:
+        _LOGGER.error("Unsupported manufacturer: %r", identity.manufacturer)
         raise _UnsupportedHardware
-    if manufacturer not in SUPPORTED_MANUFACTURERS:
-        _LOGGER.error("Unsupported manufacturer: %r", manufacturer)
-        raise _UnsupportedHardware
-
-    model = hub.data.get("i_model")
-    if model is None:
-        _LOGGER.error("No model type is returned")
-        raise _UnsupportedHardware
-
-    if not any(model.startswith(supported_model) for supported_model in SUPPORTED_MODELS):
-        _LOGGER.warning("Untested model %s", model)
+    if not any(identity.model.startswith(model) for model in SUPPORTED_MODELS):
+        _LOGGER.warning("Untested model %s", identity.model)
 
     return {"title": _entry_title(data)}
 
@@ -429,9 +445,12 @@ class TokenFlowMixin:
             try:
                 settings = _expand_settings_input(user_input, defaults)
                 _validate_static_input(settings)
-                apply_modbus_config = force_apply_modbus_config or _should_apply_modbus_config(
-                    settings,
-                    previous_settings,
+                apply_modbus_config = (
+                    force_apply_modbus_config
+                    or _should_apply_modbus_config(
+                        settings,
+                        previous_settings,
+                    )
                 )
                 token = await _async_load_token(self.hass, settings[CONF_HOST])
                 if token is None:
@@ -440,7 +459,9 @@ class TokenFlowMixin:
                         previous_host,
                         apply_modbus_config,
                     )
-                    return await self._async_show_password_step(step_id=password_step_id)
+                    return await self._async_show_password_step(
+                        step_id=password_step_id
+                    )
 
                 info = await _validate_input(
                     self.hass,
@@ -450,6 +471,8 @@ class TokenFlowMixin:
                 )
                 self._pending_flow_state = None
                 return await on_success(settings, info, previous_host)
+            except data_entry_flow.AbortFlow:
+                raise
             except _InvalidApiCredentials:
                 self._pending_flow_state = _PendingFlowState(
                     settings,
@@ -503,7 +526,9 @@ class TokenFlowMixin:
                             user=TECHNICIAN_USERNAME,
                         )
                     except Exception:
-                        _LOGGER.warning("Failed to store technician token, export limit control will be unavailable")
+                        _LOGGER.warning(
+                            "Failed to store technician token, export limit control will be unavailable"
+                        )
                 info = await _validate_input(
                     self.hass,
                     state.settings,
@@ -512,6 +537,8 @@ class TokenFlowMixin:
                 )
                 self._pending_flow_state = None
                 return await on_success(state.settings, info, state.previous_host)
+            except data_entry_flow.AbortFlow:
+                raise
             except Exception as err:  # pylint: disable=broad-except
                 _set_form_error(errors, err)
 
@@ -522,7 +549,7 @@ class ConfigFlow(TokenFlowMixin, config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow."""
 
     VERSION = 1
-    MINOR_VERSION = 9
+    MINOR_VERSION = 10
     CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_POLL
 
     def __init__(self) -> None:

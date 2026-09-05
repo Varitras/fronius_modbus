@@ -8,6 +8,7 @@
         "data": {
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
+          "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
           "restrict_modbus_to_this_ip": "Modbus auf diese IP beschränken"
         }
       },
@@ -24,6 +25,7 @@
         "data": {
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
+          "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
           "restrict_modbus_to_this_ip": "Modbus auf diese IP beschränken"
         }
       },
@@ -485,6 +487,7 @@
             "data": {
               "host": "Host",
               "scan_interval": "Aktualisierungsintervall (Sekunden)",
+              "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
               "restrict_modbus_to_this_ip": "Modbus auf diese IP beschränken"
             }
           },
@@ -562,6 +565,7 @@
         "data": {
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
+          "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
           "restrict_modbus_to_this_ip": "Modbus auf diese IP beschränken"
         }
       },

@@ -1579,7 +1579,8 @@ class FroniusEntity(CoordinatorEntity):
         self._runtime = runtime
         self.entity_description = description
         self._attr_translation_key = description.translation_key
-        self._attr_translation_placeholders = description.translation_placeholders
+        if description.translation_placeholders is not None:
+            self._attr_translation_placeholders = description.translation_placeholders
         self._attr_unique_id = f"{entity_prefix(entry.entry_id)}_{description.key}"
         self._attr_device_info = device_info(
             runtime, entry, description.device, description.meter_unit_id
