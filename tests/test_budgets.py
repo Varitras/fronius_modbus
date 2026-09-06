@@ -35,7 +35,9 @@ LINE_BUDGETS = {
     # 1688 until the reset counter learned to require consecutive lower polls.
     # 1691 until the module entered the mypy scope: the narrowing helpers and
     # the value_fn factories that replaced the loop-bound lambda defaults.
-    "entities.py": 1781,
+    # +29: the translation-key map that keeps hassfest happy (upstream data keys
+    # are not valid translation keys), table file, ~85 % declarative
+    "entities.py": 1810,
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to

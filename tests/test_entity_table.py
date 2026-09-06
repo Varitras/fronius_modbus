@@ -2,6 +2,7 @@
 
 import json
 import pathlib
+import re
 from unittest.mock import MagicMock
 
 from custom_components.fronius_modbus import entities
@@ -76,3 +77,22 @@ def test_no_energy_sensor_uses_the_measurement_state_class():
             assert description.state_class != SensorStateClass.MEASUREMENT, (
                 description.key
             )
+
+
+def test_every_translation_key_is_one_hassfest_accepts():
+    """hassfest rejects keys outside [a-z0-9-_]+; the 0.3 data keys such as AphA failed it."""
+    runtime = _everything_present()
+    pattern = re.compile(r"^[a-z0-9][a-z0-9-_]*[a-z0-9]$|^[a-z0-9]$")
+    offenders = [
+        description.translation_key
+        for factory in (
+            entities.sensor_descriptions,
+            entities.number_descriptions,
+            entities.select_descriptions,
+            entities.switch_descriptions,
+            entities.button_descriptions,
+        )
+        for description in factory(runtime)
+        if not pattern.match(description.translation_key)
+    ]
+    assert offenders == []

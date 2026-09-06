@@ -248,7 +248,7 @@ def _sensor(
 _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
     _sensor(
         "A",
-        "A",
+        "ac_current",
         report_name=REPORT_INVERTER,
         value_fn=lambda r: assume_present(r.device.inverter).a,
         device_class=SensorDeviceClass.CURRENT,
@@ -258,7 +258,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
     ),
     _sensor(
         "AphA",
-        "AphA",
+        "ac_current_l1",
         report_name=REPORT_INVERTER,
         value_fn=lambda r: assume_present(r.device.inverter).aph_a,
         device_class=SensorDeviceClass.CURRENT,
@@ -403,7 +403,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
     ),
     _sensor(
         "Conn",
-        "Conn",
+        "connection_control",
         report_name=REPORT_CONTROLS,
         value_fn=lambda r: _controls_value(r, lambda c: _control_status(c.connected)),
         exists_fn=_controls_present,
@@ -411,7 +411,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
     ),
     _sensor(
         "WMaxLim_Ena",
-        "WMaxLim_Ena",
+        "power_limit_control",
         report_name=REPORT_CONTROLS,
         value_fn=lambda r: _controls_value(
             r, lambda c: _control_status(c.ac_limit_enabled)
@@ -421,7 +421,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
     ),
     _sensor(
         "OutPFSet_Ena",
-        "OutPFSet_Ena",
+        "power_factor_control",
         report_name=REPORT_CONTROLS,
         value_fn=lambda r: _controls_value(
             r, lambda c: _control_status(c.power_factor_enabled)
@@ -431,7 +431,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
     ),
     _sensor(
         "VArPct_Ena",
-        "VArPct_Ena",
+        "reactive_power_control",
         report_name=REPORT_CONTROLS,
         value_fn=lambda r: _controls_value(
             r, lambda c: _control_status(c.var_percent_enabled)
@@ -441,7 +441,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
     ),
     _sensor(
         "PhVphA",
-        "PhVphA",
+        "ac_voltage_l1_n",
         report_name=REPORT_INVERTER,
         value_fn=lambda r: assume_present(r.device.inverter).ph_vph_a,
         device_class=SensorDeviceClass.VOLTAGE,
@@ -490,7 +490,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
     # -- three-phase-only inverter sensors -----------------------------------
     _sensor(
         "AphB",
-        "AphB",
+        "ac_current_l2",
         report_name=REPORT_INVERTER,
         value_fn=lambda r: assume_present(r.device.inverter).aph_b,
         exists_fn=lambda r: r.device.three_phase,
@@ -501,7 +501,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
     ),
     _sensor(
         "AphC",
-        "AphC",
+        "ac_current_l3",
         report_name=REPORT_INVERTER,
         value_fn=lambda r: assume_present(r.device.inverter).aph_c,
         exists_fn=lambda r: r.device.three_phase,
@@ -512,7 +512,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
     ),
     _sensor(
         "PhVphB",
-        "PhVphB",
+        "ac_voltage_l2_n",
         report_name=REPORT_INVERTER,
         value_fn=lambda r: assume_present(r.device.inverter).ph_vph_b,
         exists_fn=lambda r: r.device.three_phase,
@@ -523,7 +523,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
     ),
     _sensor(
         "PhVphC",
-        "PhVphC",
+        "ac_voltage_l3_n",
         report_name=REPORT_INVERTER,
         value_fn=lambda r: assume_present(r.device.inverter).ph_vph_c,
         exists_fn=lambda r: r.device.three_phase,
@@ -534,7 +534,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
     ),
     _sensor(
         "PPVphAB",
-        "PPVphAB",
+        "ac_voltage_l1_l2",
         report_name=REPORT_INVERTER,
         value_fn=lambda r: assume_present(r.device.inverter).pp_vph_ab,
         exists_fn=lambda r: r.device.three_phase,
@@ -545,7 +545,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
     ),
     _sensor(
         "PPVphBC",
-        "PPVphBC",
+        "ac_voltage_l2_l3",
         report_name=REPORT_INVERTER,
         value_fn=lambda r: assume_present(r.device.inverter).pp_vph_bc,
         exists_fn=lambda r: r.device.three_phase,
@@ -556,7 +556,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
     ),
     _sensor(
         "PPVphCA",
-        "PPVphCA",
+        "ac_voltage_l3_l1",
         report_name=REPORT_INVERTER,
         value_fn=lambda r: assume_present(r.device.inverter).pp_vph_ca,
         exists_fn=lambda r: r.device.three_phase,
@@ -838,7 +838,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
     ),
     _sensor(
         "WHRtg",
-        "WHRtg",
+        "energy_rating",
         device="storage",
         report_name=REPORT_NAMEPLATE,
         value_fn=lambda r: assume_present(r.device.nameplate).wh_rtg,
@@ -849,7 +849,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
     ),
     _sensor(
         "MaxChaRte",
-        "MaxChaRte",
+        "max_charge_rate",
         device="storage",
         report_name=REPORT_NAMEPLATE,
         value_fn=lambda r: assume_present(r.device.nameplate).max_cha_rte,
@@ -861,7 +861,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
     ),
     _sensor(
         "MaxDisChaRte",
-        "MaxDisChaRte",
+        "max_discharge_rate",
         device="storage",
         report_name=REPORT_NAMEPLATE,
         value_fn=lambda r: assume_present(r.device.nameplate).max_dis_cha_rte,
@@ -882,6 +882,33 @@ _SINGLE_PHASE_UNSUPPORTED_METER_KEYS = (
     "PhVphC",
     "PPV",
 )
+
+
+# The 0.3 data keys double as translation keys, but hassfest only accepts
+# [a-z0-9-_]+ there; the unique ids keep the data keys, the names move.
+_TRANSLATION_KEYS: dict[str, str] = {
+    "A": "ac_current",
+    "AphA": "ac_current_l1",
+    "AphB": "ac_current_l2",
+    "AphC": "ac_current_l3",
+    "Conn": "connection_control",
+    "WMaxLim_Ena": "power_limit_control",
+    "OutPFSet_Ena": "power_factor_control",
+    "VArPct_Ena": "reactive_power_control",
+    "PhVphA": "ac_voltage_l1_n",
+    "PhVphB": "ac_voltage_l2_n",
+    "PhVphC": "ac_voltage_l3_n",
+    "PPV": "ac_voltage_line_line",
+    "PPVphAB": "ac_voltage_l1_l2",
+    "PPVphBC": "ac_voltage_l2_l3",
+    "PPVphCA": "ac_voltage_l3_l1",
+    "WphA": "power_l1",
+    "WphB": "power_l2",
+    "WphC": "power_l3",
+    "WHRtg": "energy_rating",
+    "MaxChaRte": "max_charge_rate",
+    "MaxDisChaRte": "max_discharge_rate",
+}
 
 
 _METER_SENSOR_SPECS: tuple[tuple, ...] = (
@@ -1028,7 +1055,7 @@ def _meter_sensor_descriptions(
     descriptions = [
         _sensor(
             f"meter_{unit_id}_{suffix}",
-            suffix,
+            _TRANSLATION_KEYS.get(suffix, suffix),
             device="meter",
             report_name=meter_report_name(unit_id),
             meter_unit_id=unit_id,
@@ -1398,6 +1425,7 @@ _CONTROL_STATUS_OPTIONS = {0: CONTROL_STATUS[0], 1: CONTROL_STATUS[1]}
 
 def _select(
     key: str,
+    translation_key: str | None = None,
     *,
     device: DeviceKind = "inverter",
     source: Source = "modbus",
@@ -1410,7 +1438,7 @@ def _select(
 ) -> FroniusSelectDescription:
     return FroniusSelectDescription(
         key=key,
-        translation_key=key,
+        translation_key=translation_key or key,
         device=device,
         source=source,
         report_name=report_name,
@@ -1474,6 +1502,7 @@ _SELECT_DESCRIPTIONS: tuple[FroniusSelectDescription, ...] = (
     ),
     _select(
         "Conn",
+        translation_key=_TRANSLATION_KEYS["Conn"],
         report_name=REPORT_CONTROLS,
         options_map=_CONTROL_STATUS_OPTIONS,
         value_fn=lambda r: _controls_value(r, lambda c: _control_status(c.connected)),
