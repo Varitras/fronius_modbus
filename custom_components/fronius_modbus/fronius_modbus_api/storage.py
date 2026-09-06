@@ -178,10 +178,16 @@ class StorageControl:
         # The device refuses a read for a moment right after a write (real
         # GEN24, fw 1.38.6-1: exception 4 on the block read that follows).
         # The coordinator's next poll picks the new values up instead.
+        # The rate that rises goes first: with both rates at or below zero for
+        # an instant the firmware refuses the second write (exception 3, seen
+        # on Charge from Grid -> Block Charging, upstream #126).
+        rate_writes = [("in_w_rte", in_rate), ("out_w_rte", out_rate)]
+        if (self._storage.out_w_rte or 0.0) < out_rate:
+            rate_writes.reverse()
         async with self._write_lock:
             await self._storage.write("stor_ctl_mod", sunspec_mode)
-            await self._storage.write("in_w_rte", in_rate)
-            await self._storage.write("out_w_rte", out_rate)
+            for field_name, rate in rate_writes:
+                await self._storage.write(field_name, rate)
             self._extended_mode = mode
 
     async def set_charge_limit_w(self, watts: float) -> None:

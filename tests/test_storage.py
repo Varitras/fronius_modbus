@@ -90,6 +90,21 @@ async def test_charge_from_grid_writes_mode_then_rates(control, writes):
     assert control.extended_mode is ExtendedMode.CHARGE_FROM_GRID
 
 
+async def test_block_charging_after_grid_charging_raises_the_discharge_rate_first(
+    control, writes
+):
+    """Upstream #126: both rates at or below zero for an instant is refused (exception 3)."""
+    await control.set_mode(ExtendedMode.CHARGE_FROM_GRID)
+    await control.set_grid_charge_power_w(2560)
+    await control._storage.async_update()
+    del writes[:]
+    await control.set_mode(ExtendedMode.BLOCK_CHARGING)
+    order = [event.address for event in writes]
+    assert order.index(OUT_W_RTE) < order.index(IN_W_RTE)
+    assert _words(writes, OUT_W_RTE) == [10000]
+    assert _words(writes, IN_W_RTE) == [0]
+
+
 async def test_grid_charge_power_is_a_negative_discharge_rate(control, writes):
     await control.set_mode(ExtendedMode.CHARGE_FROM_GRID)
     await control.set_grid_charge_power_w(2560)
