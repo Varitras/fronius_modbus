@@ -182,3 +182,36 @@ async def test_a_write_succeeds_when_the_read_right_after_it_is_refused(
     await control.set_minimum_reserve(6)
 
     assert _words(writes, MIN_RSV_PCT) == [600]
+
+
+def _refuse_the_next_read(inverter_unit) -> None:
+    """Answer the block read that follows the next write with exception 4."""
+    inverter_unit.on_write(
+        lambda _event: inverter_unit.fail_read(
+            STORAGE_HEADER, ServerDeviceFailureError()
+        )
+    )
+
+
+async def test_a_mode_write_succeeds_when_the_read_right_after_it_is_refused(
+    control, inverter_unit, writes
+):
+    """Same transient refusal as the reserve write: the mode write must survive it."""
+    _refuse_the_next_read(inverter_unit)
+
+    await control.set_mode(ExtendedMode.CHARGE_FROM_GRID)
+
+    assert _words(writes, STOR_CTL_MOD) == [2]
+    assert control.extended_mode is ExtendedMode.CHARGE_FROM_GRID
+
+
+async def test_a_rate_write_succeeds_when_the_read_right_after_it_is_refused(
+    control, inverter_unit, writes
+):
+    """Same transient refusal as the reserve write: a rate write must survive it."""
+    await control.set_mode(ExtendedMode.PV_CHARGE_LIMIT)
+    _refuse_the_next_read(inverter_unit)
+
+    await control.set_charge_limit_w(5120)
+
+    assert _words(writes, IN_W_RTE)[-1] == 5000
