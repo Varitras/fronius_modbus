@@ -123,6 +123,18 @@ async def test_refresh_fills_the_web_data(control):
     assert data.storage_temperature == 22.0
 
 
+async def test_auto_mode_with_a_manual_soc_mode_still_reads_as_auto(hass):
+    """The inverter leaves BAT_M0_SOC_MODE at "manual" after any SoC write."""
+    client = FakeWebClient()
+    client.battery.update(HYB_EM_MODE=0, BAT_M0_SOC_MODE="manual")
+    control = make_control(hass, client=client)
+    data = await control.async_refresh()
+    assert data.battery_mode_effective == 0
+    assert data.battery_mode == "Auto"
+    assert control.battery_mode_is_manual is False
+    control.shutdown()
+
+
 async def test_switching_to_manual_sends_power_and_soc_minimum(control):
     await control.async_refresh()
     await control.set_battery_mode(1)

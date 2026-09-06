@@ -91,6 +91,13 @@
     "tests": "switching_back_to_manual_keeps_the_modbus_reserve"
   },
   {
+    "label": "web control: the battery mode still vetoes on the SoC mode",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "    if raw_mode == BATTERY_MODE_MANUAL:\n        return BATTERY_MODE_MANUAL\n    if raw_mode == BATTERY_MODE_AUTO:\n        return BATTERY_MODE_AUTO\n    return None",
+    "new": "    if raw_mode == BATTERY_MODE_AUTO:\n        return BATTERY_MODE_MANUAL\n    if raw_mode == BATTERY_MODE_MANUAL:\n        return BATTERY_MODE_AUTO\n    return None",
+    "tests": "auto_mode_with_a_manual_soc_mode_still_reads_as_auto"
+  },
+  {
     "label": "migrations: stale entities are only kept after a failed poll",
     "path": "custom_components/fronius_modbus/migrations.py",
     "old": "    if runtime.modbus.data.report.failed or web_refresh_failed:",

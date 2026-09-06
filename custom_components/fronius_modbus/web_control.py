@@ -139,12 +139,12 @@ def _parse_firmware_version(version_text: Any) -> tuple[int, int, int, int] | No
     return (int(major), int(minor), int(patch), int(build))
 
 
-def _derive_api_battery_mode(
-    raw_mode: int | None, raw_soc_mode: str | None
-) -> int | None:
-    if raw_mode == BATTERY_MODE_MANUAL and raw_soc_mode == SOC_MODE_MANUAL:
+def _derive_api_battery_mode(raw_mode: int | None) -> int | None:
+    # The inverter leaves BAT_M0_SOC_MODE at "manual" after any SoC write, so
+    # that field must not veto HYB_EM_MODE as the source of truth.
+    if raw_mode == BATTERY_MODE_MANUAL:
         return BATTERY_MODE_MANUAL
-    if raw_mode == BATTERY_MODE_AUTO and raw_soc_mode == SOC_MODE_AUTO:
+    if raw_mode == BATTERY_MODE_AUTO:
         return BATTERY_MODE_AUTO
     return None
 
@@ -360,7 +360,7 @@ class FroniusWebControl:
     def _set_effective_battery_mode(
         self, raw_mode: int | None, raw_soc_mode: str | None
     ) -> None:
-        effective_mode = _derive_api_battery_mode(raw_mode, raw_soc_mode)
+        effective_mode = _derive_api_battery_mode(raw_mode)
         self.data.battery_mode_raw = raw_mode
         self.data.battery_mode_effective = effective_mode
         self.data.battery_mode = (
