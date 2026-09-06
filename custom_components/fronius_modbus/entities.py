@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 import logging
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from modbus_connection import ModbusError
 
@@ -53,7 +53,13 @@ from .const import (
     instance_key,
     map_code,
 )
-from .coordinator import FroniusConfigEntry, FroniusRuntimeData
+from .coordinator import (
+    FroniusConfigEntry,
+    FroniusModbusCoordinator,
+    FroniusRuntimeData,
+    FroniusWebCoordinator,
+    assume_present,
+)
 from .fronius_modbus_api.device import (
     REPORT_CONTROLS,
     REPORT_INVERTER,
@@ -69,6 +75,7 @@ from .fronius_modbus_api.storage import (
     DISCHARGE_LIMIT_MODES,
     ExtendedMode,
 )
+from .fronius_modbus_api.sunspec_models import MpptModule
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -89,7 +96,6 @@ class FroniusDescriptionMixin:
     """Fields every Fronius entity description carries, on top of the HA one."""
 
     key: str
-    translation_key: str
     device: DeviceKind
     source: Source = "modbus"
     report_name: str | None = None
@@ -139,6 +145,15 @@ class FroniusButtonDescription(ButtonEntityDescription, FroniusDescriptionMixin)
     press: Callable[[FroniusRuntimeData], Awaitable[None]]
 
 
+type FroniusDescription = (
+    FroniusSensorDescription
+    | FroniusNumberDescription
+    | FroniusSelectDescription
+    | FroniusSwitchDescription
+    | FroniusButtonDescription
+)
+
+
 # -- value helpers -----------------------------------------------------------------
 
 
@@ -160,13 +175,20 @@ def _ac_limit_status(value: bool | None) -> str:
     return AC_LIMIT_STATUS[1] if value else AC_LIMIT_STATUS[0]
 
 
-def _web_field(runtime: FroniusRuntimeData, field_name: str) -> Any:
-    web_data = runtime.web_data
-    return None if web_data is None else getattr(web_data, field_name)
+def _mppt_channel_module(
+    runtime: FroniusRuntimeData, channel: int | None
+) -> MpptModule:
+    """The MPPT module on a storage channel, assumed present like its channel."""
+    return assume_present(runtime.device.mppt_module(assume_present(channel)))
 
 
 def _storage_present(runtime: FroniusRuntimeData) -> bool:
     return runtime.device.storage is not None
+
+
+def _web_field(runtime: FroniusRuntimeData, field_name: str) -> Any:
+    web_data = runtime.web_data
+    return None if web_data is None else getattr(web_data, field_name)
 
 
 def _web_configured(runtime: FroniusRuntimeData) -> bool:
@@ -228,7 +250,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "A",
         "A",
         report_name=REPORT_INVERTER,
-        value_fn=lambda r: r.device.inverter.a,
+        value_fn=lambda r: assume_present(r.device.inverter).a,
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
         unit="A",
@@ -238,7 +260,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "AphA",
         "AphA",
         report_name=REPORT_INVERTER,
-        value_fn=lambda r: r.device.inverter.aph_a,
+        value_fn=lambda r: assume_present(r.device.inverter).aph_a,
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
         unit="A",
@@ -248,7 +270,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "acpower",
         "acpower",
         report_name=REPORT_INVERTER,
-        value_fn=lambda r: r.device.inverter.w,
+        value_fn=lambda r: assume_present(r.device.inverter).w,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         unit="W",
@@ -258,7 +280,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "var",
         "var",
         report_name=REPORT_INVERTER,
-        value_fn=lambda r: r.device.inverter.v_ar,
+        value_fn=lambda r: assume_present(r.device.inverter).v_ar,
         state_class=SensorStateClass.MEASUREMENT,
         unit="var",
         icon="mdi:sine-wave",
@@ -267,7 +289,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "acenergy",
         "acenergy",
         report_name=REPORT_INVERTER,
-        value_fn=lambda r: r.device.inverter.wh,
+        value_fn=lambda r: assume_present(r.device.inverter).wh,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
         unit="Wh",
@@ -289,7 +311,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "pv_connection",
         report_name=REPORT_STATUS,
         value_fn=lambda r: map_code(
-            CONNECTION_STATUS_CONDENSED, r.device.status.pv_conn
+            CONNECTION_STATUS_CONDENSED, assume_present(r.device.status).pv_conn
         ),
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
@@ -297,28 +319,34 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "ecp_connection",
         "ecp_connection",
         report_name=REPORT_STATUS,
-        value_fn=lambda r: map_code(ECP_CONNECTION_STATUS, r.device.status.ecp_conn),
+        value_fn=lambda r: map_code(
+            ECP_CONNECTION_STATUS, assume_present(r.device.status).ecp_conn
+        ),
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     _sensor(
         "status",
         "status",
         report_name=REPORT_INVERTER,
-        value_fn=lambda r: map_code(INVERTER_STATUS, r.device.inverter.st),
+        value_fn=lambda r: map_code(
+            INVERTER_STATUS, assume_present(r.device.inverter).st
+        ),
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     _sensor(
         "statusvendor",
         "statusvendor",
         report_name=REPORT_INVERTER,
-        value_fn=lambda r: map_code(FRONIUS_INVERTER_STATUS, r.device.inverter.st_vnd),
+        value_fn=lambda r: map_code(
+            FRONIUS_INVERTER_STATUS, assume_present(r.device.inverter).st_vnd
+        ),
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     _sensor(
         "line_frequency",
         "line_frequency",
         report_name=REPORT_INVERTER,
-        value_fn=lambda r: r.device.inverter.hz,
+        value_fn=lambda r: assume_present(r.device.inverter).hz,
         device_class=SensorDeviceClass.FREQUENCY,
         state_class=SensorStateClass.MEASUREMENT,
         unit="Hz",
@@ -328,7 +356,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "control_mode",
         report_name=REPORT_STATUS,
         value_fn=lambda r: bitmask_to_string(
-            r.device.status.st_act_ctl, INVERTER_CONTROLS, "Normal"
+            assume_present(r.device.status).st_act_ctl, INVERTER_CONTROLS, "Normal"
         ),
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
@@ -336,7 +364,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "vref",
         "vref",
         report_name=REPORT_SETTINGS,
-        value_fn=lambda r: r.device.settings.v_ref,
+        value_fn=lambda r: assume_present(r.device.settings).v_ref,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         unit="V",
@@ -347,7 +375,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "vrefofs",
         "vrefofs",
         report_name=REPORT_SETTINGS,
-        value_fn=lambda r: r.device.settings.v_ref_ofs,
+        value_fn=lambda r: assume_present(r.device.settings).v_ref_ofs,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         unit="V",
@@ -358,7 +386,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "max_power",
         "max_power",
         report_name=REPORT_SETTINGS,
-        value_fn=lambda r: r.device.settings.w_max,
+        value_fn=lambda r: assume_present(r.device.settings).w_max,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         unit="W",
@@ -369,7 +397,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "events2",
         report_name=REPORT_INVERTER,
         value_fn=lambda r: bitmask_to_string(
-            r.device.inverter.evt_vnd2, INVERTER_EVENTS, "None", bits=32
+            assume_present(r.device.inverter).evt_vnd2, INVERTER_EVENTS, "None", bits=32
         ),
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
@@ -415,7 +443,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "PhVphA",
         "PhVphA",
         report_name=REPORT_INVERTER,
-        value_fn=lambda r: r.device.inverter.ph_vph_a,
+        value_fn=lambda r: assume_present(r.device.inverter).ph_vph_a,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         unit="V",
@@ -424,7 +452,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
     _sensor(
         "i_unit_id",
         "unit_id",
-        value_fn=lambda r: r.device.identity.address,
+        value_fn=lambda r: assume_present(r.device.identity).address,
         exists_fn=lambda r: r.device.identity is not None,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
@@ -464,7 +492,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "AphB",
         "AphB",
         report_name=REPORT_INVERTER,
-        value_fn=lambda r: r.device.inverter.aph_b,
+        value_fn=lambda r: assume_present(r.device.inverter).aph_b,
         exists_fn=lambda r: r.device.three_phase,
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -475,7 +503,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "AphC",
         "AphC",
         report_name=REPORT_INVERTER,
-        value_fn=lambda r: r.device.inverter.aph_c,
+        value_fn=lambda r: assume_present(r.device.inverter).aph_c,
         exists_fn=lambda r: r.device.three_phase,
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -486,7 +514,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "PhVphB",
         "PhVphB",
         report_name=REPORT_INVERTER,
-        value_fn=lambda r: r.device.inverter.ph_vph_b,
+        value_fn=lambda r: assume_present(r.device.inverter).ph_vph_b,
         exists_fn=lambda r: r.device.three_phase,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -497,7 +525,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "PhVphC",
         "PhVphC",
         report_name=REPORT_INVERTER,
-        value_fn=lambda r: r.device.inverter.ph_vph_c,
+        value_fn=lambda r: assume_present(r.device.inverter).ph_vph_c,
         exists_fn=lambda r: r.device.three_phase,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -508,7 +536,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "PPVphAB",
         "PPVphAB",
         report_name=REPORT_INVERTER,
-        value_fn=lambda r: r.device.inverter.pp_vph_ab,
+        value_fn=lambda r: assume_present(r.device.inverter).pp_vph_ab,
         exists_fn=lambda r: r.device.three_phase,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -519,7 +547,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "PPVphBC",
         "PPVphBC",
         report_name=REPORT_INVERTER,
-        value_fn=lambda r: r.device.inverter.pp_vph_bc,
+        value_fn=lambda r: assume_present(r.device.inverter).pp_vph_bc,
         exists_fn=lambda r: r.device.three_phase,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -530,7 +558,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "PPVphCA",
         "PPVphCA",
         report_name=REPORT_INVERTER,
-        value_fn=lambda r: r.device.inverter.pp_vph_ca,
+        value_fn=lambda r: assume_present(r.device.inverter).pp_vph_ca,
         exists_fn=lambda r: r.device.three_phase,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -605,7 +633,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "storage_charge_current",
         "storage_charge_current",
         report_name=REPORT_MPPT,
-        value_fn=lambda r: r.device.mppt_module(r.device.mppt_channels.charge).dca,
+        value_fn=lambda r: _mppt_channel_module(r, r.device.mppt_channels.charge).dca,
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -616,7 +644,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "storage_charge_voltage",
         "storage_charge_voltage",
         report_name=REPORT_MPPT,
-        value_fn=lambda r: r.device.mppt_module(r.device.mppt_channels.charge).dcv,
+        value_fn=lambda r: _mppt_channel_module(r, r.device.mppt_channels.charge).dcv,
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -627,7 +655,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "storage_charge_power",
         "storage_charge_power",
         report_name=REPORT_MPPT,
-        value_fn=lambda r: r.device.mppt_module(r.device.mppt_channels.charge).dcw,
+        value_fn=lambda r: _mppt_channel_module(r, r.device.mppt_channels.charge).dcw,
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -638,7 +666,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "storage_charge_lfte",
         "storage_charge_lfte",
         report_name=REPORT_MPPT,
-        value_fn=lambda r: r.device.mppt_module(r.device.mppt_channels.charge).dcwh,
+        value_fn=lambda r: _mppt_channel_module(r, r.device.mppt_channels.charge).dcwh,
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -649,7 +677,9 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "storage_discharge_current",
         "storage_discharge_current",
         report_name=REPORT_MPPT,
-        value_fn=lambda r: r.device.mppt_module(r.device.mppt_channels.discharge).dca,
+        value_fn=lambda r: (
+            _mppt_channel_module(r, r.device.mppt_channels.discharge).dca
+        ),
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -660,7 +690,9 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "storage_discharge_voltage",
         "storage_discharge_voltage",
         report_name=REPORT_MPPT,
-        value_fn=lambda r: r.device.mppt_module(r.device.mppt_channels.discharge).dcv,
+        value_fn=lambda r: (
+            _mppt_channel_module(r, r.device.mppt_channels.discharge).dcv
+        ),
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -671,7 +703,9 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "storage_discharge_power",
         "storage_discharge_power",
         report_name=REPORT_MPPT,
-        value_fn=lambda r: r.device.mppt_module(r.device.mppt_channels.discharge).dcw,
+        value_fn=lambda r: (
+            _mppt_channel_module(r, r.device.mppt_channels.discharge).dcw
+        ),
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -682,7 +716,9 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "storage_discharge_lfte",
         "storage_discharge_lfte",
         report_name=REPORT_MPPT,
-        value_fn=lambda r: r.device.mppt_module(r.device.mppt_channels.discharge).dcwh,
+        value_fn=lambda r: (
+            _mppt_channel_module(r, r.device.mppt_channels.discharge).dcwh
+        ),
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -694,7 +730,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "storage_connection",
         report_name=REPORT_STATUS,
         value_fn=lambda r: map_code(
-            CONNECTION_STATUS_CONDENSED, r.device.status.stor_conn
+            CONNECTION_STATUS_CONDENSED, assume_present(r.device.status).stor_conn
         ),
         exists_fn=_storage_present,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -717,7 +753,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         device="storage",
         report_name=REPORT_STORAGE,
         value_fn=lambda r: map_code(
-            STORAGE_CONTROL_MODE, r.storage_control.control_mode
+            STORAGE_CONTROL_MODE, assume_present(r.storage_control).control_mode
         ),
         exists_fn=_storage_present,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -727,7 +763,9 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "charge_status",
         device="storage",
         report_name=REPORT_STORAGE,
-        value_fn=lambda r: map_code(CHARGE_STATUS, r.device.storage.cha_st),
+        value_fn=lambda r: map_code(
+            CHARGE_STATUS, assume_present(r.device.storage).cha_st
+        ),
         exists_fn=_storage_present,
         # 0.3's row for this entity had no seventh field, so it carried no category.
         entity_category=None,
@@ -737,7 +775,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "max_charge",
         device="storage",
         report_name=REPORT_STORAGE,
-        value_fn=lambda r: r.device.storage.w_cha_max,
+        value_fn=lambda r: assume_present(r.device.storage).w_cha_max,
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -749,7 +787,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "soc",
         device="storage",
         report_name=REPORT_STORAGE,
-        value_fn=lambda r: r.device.storage.cha_state,
+        value_fn=lambda r: assume_present(r.device.storage).cha_state,
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.BATTERY,
         state_class=SensorStateClass.MEASUREMENT,
@@ -760,7 +798,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "charging_power",
         device="storage",
         report_name=REPORT_STORAGE,
-        value_fn=lambda r: r.device.storage.in_w_rte,
+        value_fn=lambda r: assume_present(r.device.storage).in_w_rte,
         exists_fn=_storage_present,
         unit="%",
         icon="mdi:gauge",
@@ -771,7 +809,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "discharging_power",
         device="storage",
         report_name=REPORT_STORAGE,
-        value_fn=lambda r: r.device.storage.out_w_rte,
+        value_fn=lambda r: assume_present(r.device.storage).out_w_rte,
         exists_fn=_storage_present,
         unit="%",
         icon="mdi:gauge",
@@ -782,7 +820,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "soc_minimum",
         device="storage",
         report_name=REPORT_STORAGE,
-        value_fn=lambda r: r.storage_control.soc_minimum,
+        value_fn=lambda r: assume_present(r.storage_control).soc_minimum,
         exists_fn=_storage_present,
         unit="%",
         icon="mdi:gauge",
@@ -792,7 +830,9 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "grid_charging",
         device="storage",
         report_name=REPORT_STORAGE,
-        value_fn=lambda r: map_code(CHARGE_GRID_STATUS, r.device.storage.cha_gri_set),
+        value_fn=lambda r: map_code(
+            CHARGE_GRID_STATUS, assume_present(r.device.storage).cha_gri_set
+        ),
         exists_fn=_storage_present,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
@@ -801,7 +841,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "WHRtg",
         device="storage",
         report_name=REPORT_NAMEPLATE,
-        value_fn=lambda r: r.device.nameplate.wh_rtg,
+        value_fn=lambda r: assume_present(r.device.nameplate).wh_rtg,
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.ENERGY,
         unit="Wh",
@@ -812,7 +852,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "MaxChaRte",
         device="storage",
         report_name=REPORT_NAMEPLATE,
-        value_fn=lambda r: r.device.nameplate.max_cha_rte,
+        value_fn=lambda r: assume_present(r.device.nameplate).max_cha_rte,
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -824,7 +864,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "MaxDisChaRte",
         device="storage",
         report_name=REPORT_NAMEPLATE,
-        value_fn=lambda r: r.device.nameplate.max_dis_cha_rte,
+        value_fn=lambda r: assume_present(r.device.nameplate).max_dis_cha_rte,
         exists_fn=_storage_present,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -968,6 +1008,20 @@ _METER_SENSOR_SPECS: tuple[tuple, ...] = (
 )
 
 
+def _meter_value(
+    unit_id: int, getter: Callable[[Any], Any]
+) -> Callable[[FroniusRuntimeData], Any]:
+    """A value_fn reading one field off a meter, bound to that meter's unit id."""
+    return lambda runtime: getter(runtime.device.meters[unit_id].meter)
+
+
+def _mppt_module_value(
+    index: int, attribute: str
+) -> Callable[[FroniusRuntimeData], Any]:
+    """A value_fn reading one field off an MPPT module, bound to that module."""
+    return lambda runtime: getattr(runtime.device.mppt_module(index), attribute)
+
+
 def _meter_sensor_descriptions(
     unit_id: int, phases: int
 ) -> list[FroniusSensorDescription]:
@@ -978,7 +1032,7 @@ def _meter_sensor_descriptions(
             device="meter",
             report_name=meter_report_name(unit_id),
             meter_unit_id=unit_id,
-            value_fn=(lambda r, u=unit_id, get=getter: get(r.device.meters[u].meter)),
+            value_fn=_meter_value(unit_id, getter),
             device_class=device_class,
             state_class=state_class,
             unit=unit,
@@ -994,7 +1048,7 @@ def _meter_sensor_descriptions(
             device="meter",
             report_name=meter_report_name(unit_id),
             meter_unit_id=unit_id,
-            value_fn=lambda r, u=unit_id: u,
+            value_fn=lambda runtime: unit_id,
             entity_category=EntityCategory.DIAGNOSTIC,
         )
     )
@@ -1058,9 +1112,7 @@ def _mppt_sensor_descriptions(
                 translation_placeholders={"module": str(index)},
                 device="inverter",
                 report_name=REPORT_MPPT,
-                value_fn=(
-                    lambda r, i=index, a=attribute: getattr(r.device.mppt_module(i), a)
-                ),
+                value_fn=_mppt_module_value(index, attribute),
                 device_class=device_class,
                 state_class=state_class,
                 native_unit_of_measurement=unit,
@@ -1154,51 +1206,61 @@ async def _set_soc_minimum(runtime: FroniusRuntimeData, value: float) -> None:
     # A minimum the web API refuses must not reach Modbus either: the two would
     # otherwise disagree, with the reserve only half applied.
     if mirror_to_web:
-        web_control.validate_soc_minimum(percent)
-    await runtime.storage_control.set_minimum_reserve(percent)
+        assume_present(web_control).validate_soc_minimum(percent)
+    await assume_present(runtime.storage_control).set_minimum_reserve(percent)
     if mirror_to_web:
-        await web_control.set_soc_minimum_manual(percent)
+        await assume_present(web_control).set_soc_minimum_manual(percent)
 
 
 _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
     _storage_percent_number(
         "grid_discharge_power",
         max_key="max_discharge_rate_w",
-        percent_getter=lambda r: r.storage_control.grid_discharge_power_pct,
-        set_fn=lambda r, v: r.storage_control.set_grid_discharge_power_w(v),
+        percent_getter=lambda r: (
+            assume_present(r.storage_control).grid_discharge_power_pct
+        ),
+        set_fn=lambda r, v: assume_present(
+            r.storage_control
+        ).set_grid_discharge_power_w(v),
         available_fn=lambda r: (
-            r.storage_control.grid_discharge_power_pct is not None
-            and r.storage_control.extended_mode is ExtendedMode.DISCHARGE_TO_GRID
+            assume_present(r.storage_control).grid_discharge_power_pct is not None
+            and assume_present(r.storage_control).extended_mode
+            is ExtendedMode.DISCHARGE_TO_GRID
         ),
     ),
     _storage_percent_number(
         "grid_charge_power",
         max_key="max_charge_rate_w",
-        percent_getter=lambda r: r.storage_control.grid_charge_power_pct,
-        set_fn=lambda r, v: r.storage_control.set_grid_charge_power_w(v),
+        percent_getter=lambda r: (
+            assume_present(r.storage_control).grid_charge_power_pct
+        ),
+        set_fn=lambda r, v: assume_present(r.storage_control).set_grid_charge_power_w(
+            v
+        ),
         available_fn=lambda r: (
-            r.storage_control.grid_charge_power_pct is not None
-            and r.storage_control.extended_mode is ExtendedMode.CHARGE_FROM_GRID
+            assume_present(r.storage_control).grid_charge_power_pct is not None
+            and assume_present(r.storage_control).extended_mode
+            is ExtendedMode.CHARGE_FROM_GRID
         ),
     ),
     _storage_percent_number(
         "discharge_limit",
         max_key="max_discharge_rate_w",
-        percent_getter=lambda r: r.storage_control.discharge_limit_pct,
-        set_fn=lambda r, v: r.storage_control.set_discharge_limit_w(v),
+        percent_getter=lambda r: assume_present(r.storage_control).discharge_limit_pct,
+        set_fn=lambda r, v: assume_present(r.storage_control).set_discharge_limit_w(v),
         available_fn=lambda r: (
-            r.storage_control.discharge_limit_pct is not None
-            and r.storage_control.extended_mode in DISCHARGE_LIMIT_MODES
+            assume_present(r.storage_control).discharge_limit_pct is not None
+            and assume_present(r.storage_control).extended_mode in DISCHARGE_LIMIT_MODES
         ),
     ),
     _storage_percent_number(
         "charge_limit",
         max_key="max_charge_rate_w",
-        percent_getter=lambda r: r.storage_control.charge_limit_pct,
-        set_fn=lambda r, v: r.storage_control.set_charge_limit_w(v),
+        percent_getter=lambda r: assume_present(r.storage_control).charge_limit_pct,
+        set_fn=lambda r, v: assume_present(r.storage_control).set_charge_limit_w(v),
         available_fn=lambda r: (
-            r.storage_control.charge_limit_pct is not None
-            and r.storage_control.extended_mode in CHARGE_LIMIT_MODES
+            assume_present(r.storage_control).charge_limit_pct is not None
+            and assume_present(r.storage_control).extended_mode in CHARGE_LIMIT_MODES
         ),
     ),
     FroniusNumberDescription(
@@ -1207,7 +1269,7 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         device="storage",
         report_name=REPORT_STORAGE,
         exists_fn=_storage_present,
-        value_fn=lambda r: r.storage_control.soc_minimum,
+        value_fn=lambda r: assume_present(r.storage_control).soc_minimum,
         set_fn=_set_soc_minimum,
         native_min_value=5,
         native_max_value=100,
@@ -1221,10 +1283,10 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         device="inverter",
         report_name=REPORT_CONTROLS,
         value_fn=lambda r: _controls_value(r, lambda c: c.ac_limit_w),
-        set_fn=lambda r, v: r.inverter_controls.set_ac_limit_w(v),
+        set_fn=lambda r, v: assume_present(r.inverter_controls).set_ac_limit_w(v),
         exists_fn=_controls_present,
         max_fn=lambda r: (
-            (r.device.settings.w_max if r.device.settings else None)
+            (assume_present(r.device.settings).w_max if r.device.settings else None)
             or AC_LIMIT_RATE_FALLBACK_MAX_W
         ),
         native_min_value=0,
@@ -1239,7 +1301,7 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         device="inverter",
         report_name=REPORT_CONTROLS,
         value_fn=lambda r: _controls_value(r, lambda c: c.power_factor),
-        set_fn=lambda r, v: r.inverter_controls.set_power_factor(v),
+        set_fn=lambda r, v: assume_present(r.inverter_controls).set_power_factor(v),
         exists_fn=_controls_present,
         available_fn=lambda r: _controls_value(r, lambda c: c.power_factor) is not None,
         native_min_value=-1,
@@ -1253,10 +1315,10 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         device="storage",
         source="web",
         value_fn=lambda r: _web_field(r, "battery_power_w"),
-        set_fn=lambda r, v: r.web_control.set_battery_power_w(v),
+        set_fn=lambda r, v: assume_present(r.web_control).set_battery_power_w(v),
         exists_fn=lambda r: _storage_present(r) and _web_configured(r),
         available_fn=lambda r: (
-            _web_configured(r) and r.web_control.battery_mode_is_manual
+            _web_configured(r) and assume_present(r.web_control).battery_mode_is_manual
         ),
         native_min_value=-20000,
         native_max_value=20000,
@@ -1270,10 +1332,12 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         device="storage",
         source="web",
         value_fn=lambda r: _web_field(r, "soc_max"),
-        set_fn=lambda r, v: r.web_control.set_soc_maximum(int(round(v))),
+        set_fn=lambda r, v: assume_present(r.web_control).set_soc_maximum(
+            int(round(v))
+        ),
         exists_fn=lambda r: _storage_present(r) and _web_configured(r),
         available_fn=lambda r: (
-            _web_configured(r) and r.web_control.battery_mode_is_manual
+            _web_configured(r) and assume_present(r.web_control).battery_mode_is_manual
         ),
         native_min_value=0,
         native_max_value=100,
@@ -1287,10 +1351,11 @@ _NUMBER_DESCRIPTIONS: tuple[FroniusNumberDescription, ...] = (
         device="inverter",
         source="web",
         value_fn=lambda r: _web_field(r, "export_soft_limit_w"),
-        set_fn=lambda r, v: r.web_control.set_export_soft_limit_w(v),
+        set_fn=lambda r, v: assume_present(r.web_control).set_export_soft_limit_w(v),
         exists_fn=_web_configured,
         available_fn=lambda r: (
-            r.web_control is not None and r.web_control.technician_configured
+            r.web_control is not None
+            and assume_present(r.web_control).technician_configured
         ),
         native_min_value=0,
         native_max_value=15000,
@@ -1311,7 +1376,7 @@ def number_descriptions(runtime: FroniusRuntimeData) -> list[FroniusNumberDescri
 
 async def _set_ext_control_mode(runtime: FroniusRuntimeData, code: int) -> None:
     mode = ExtendedMode(code)
-    await runtime.storage_control.set_mode(mode)
+    await assume_present(runtime.storage_control).set_mode(mode)
     web_control = runtime.web_control
     if (
         mode is ExtendedMode.CHARGE_FROM_GRID
@@ -1365,7 +1430,8 @@ _SELECT_DESCRIPTIONS: tuple[FroniusSelectDescription, ...] = (
         report_name=REPORT_STORAGE,
         options_map=STORAGE_EXT_CONTROL_MODE,
         value_fn=lambda r: map_code(
-            STORAGE_EXT_CONTROL_MODE, r.storage_control.extended_mode.value
+            STORAGE_EXT_CONTROL_MODE,
+            assume_present(r.storage_control).extended_mode.value,
         ),
         set_fn=_set_ext_control_mode,
         exists_fn=_storage_present,
@@ -1376,7 +1442,7 @@ _SELECT_DESCRIPTIONS: tuple[FroniusSelectDescription, ...] = (
         source="web",
         options_map=API_BATTERY_MODE,
         value_fn=lambda r: _web_field(r, "battery_mode"),
-        set_fn=lambda r, code: r.web_control.set_battery_mode(code),
+        set_fn=lambda r, code: assume_present(r.web_control).set_battery_mode(code),
         exists_fn=lambda r: _storage_present(r) and _web_configured(r),
     ),
     _select(
@@ -1386,7 +1452,9 @@ _SELECT_DESCRIPTIONS: tuple[FroniusSelectDescription, ...] = (
         value_fn=lambda r: _controls_value(
             r, lambda c: _control_status(c.ac_limit_enabled)
         ),
-        set_fn=lambda r, code: r.inverter_controls.set_ac_limit_enable(bool(code)),
+        set_fn=lambda r, code: assume_present(r.inverter_controls).set_ac_limit_enable(
+            bool(code)
+        ),
         exists_fn=_controls_present,
     ),
     _select(
@@ -1396,7 +1464,9 @@ _SELECT_DESCRIPTIONS: tuple[FroniusSelectDescription, ...] = (
         value_fn=lambda r: _controls_value(
             r, lambda c: _control_status(c.power_factor_enabled)
         ),
-        set_fn=lambda r, code: r.inverter_controls.set_power_factor_enable(bool(code)),
+        set_fn=lambda r, code: assume_present(
+            r.inverter_controls
+        ).set_power_factor_enable(bool(code)),
         exists_fn=_controls_present,
         available_fn=lambda r: (
             _controls_value(r, lambda c: c.power_factor_enabled) is not None
@@ -1407,7 +1477,9 @@ _SELECT_DESCRIPTIONS: tuple[FroniusSelectDescription, ...] = (
         report_name=REPORT_CONTROLS,
         options_map=_CONTROL_STATUS_OPTIONS,
         value_fn=lambda r: _controls_value(r, lambda c: _control_status(c.connected)),
-        set_fn=lambda r, code: r.inverter_controls.set_connected(bool(code)),
+        set_fn=lambda r, code: assume_present(r.inverter_controls).set_connected(
+            bool(code)
+        ),
         exists_fn=_controls_present,
     ),
 )
@@ -1451,8 +1523,10 @@ _SWITCH_DESCRIPTIONS: tuple[FroniusSwitchDescription, ...] = (
         "api_charge_from_ac",
         device="storage",
         value_fn=lambda r: _web_field(r, "charge_from_ac"),
-        turn_on=lambda r: r.web_control.set_charge_sources(charge_from_ac=True),
-        turn_off=lambda r: r.web_control.set_charge_sources(
+        turn_on=lambda r: assume_present(r.web_control).set_charge_sources(
+            charge_from_ac=True
+        ),
+        turn_off=lambda r: assume_present(r.web_control).set_charge_sources(
             charge_from_grid=False, charge_from_ac=False
         ),
         exists_fn=lambda r: _storage_present(r) and _web_configured(r),
@@ -1462,18 +1536,20 @@ _SWITCH_DESCRIPTIONS: tuple[FroniusSwitchDescription, ...] = (
         "api_charge_from_grid",
         device="storage",
         value_fn=lambda r: _web_field(r, "charge_from_grid"),
-        turn_on=lambda r: r.web_control.set_charge_sources(
+        turn_on=lambda r: assume_present(r.web_control).set_charge_sources(
             charge_from_grid=True, charge_from_ac=True
         ),
-        turn_off=lambda r: r.web_control.set_charge_sources(charge_from_grid=False),
+        turn_off=lambda r: assume_present(r.web_control).set_charge_sources(
+            charge_from_grid=False
+        ),
         exists_fn=lambda r: _storage_present(r) and _web_configured(r),
         icon="mdi:transmission-tower-export",
     ),
     _switch(
         "api_solar_api_enabled",
         value_fn=lambda r: _web_field(r, "solar_api_enabled"),
-        turn_on=lambda r: r.web_control.set_solar_api_enabled(True),
-        turn_off=lambda r: r.web_control.set_solar_api_enabled(False),
+        turn_on=lambda r: assume_present(r.web_control).set_solar_api_enabled(True),
+        turn_off=lambda r: assume_present(r.web_control).set_solar_api_enabled(False),
         exists_fn=_web_configured,
         icon="mdi:api",
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -1496,7 +1572,7 @@ _BUTTON_DESCRIPTIONS: tuple[FroniusButtonDescription, ...] = (
         device="inverter",
         source="web",
         value_fn=lambda r: None,
-        press=lambda r: r.web_control.reset_modbus_control(),
+        press=lambda r: assume_present(r.web_control).reset_modbus_control(),
         exists_fn=_web_configured,
         icon="mdi:restart",
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -1540,7 +1616,7 @@ def device_info(
     """The DeviceInfo for one of the entry's devices: the inverter, the battery, a meter."""
     key = instance_key(entry.entry_id)
     if kind == "inverter":
-        identity = runtime.device.identity
+        identity = assume_present(runtime.device.identity)
         return DeviceInfo(
             identifiers={(DOMAIN, f"{key}_inverter")},
             name=f"Fronius {identity.model}",
@@ -1559,11 +1635,12 @@ def device_info(
             model=storage_model,
             serial_number=web_data.storage_serial if web_data else None,
         )
-    meters = runtime.device.meters
-    info = meters[meter_unit_id]
-    position = list(meters).index(meter_unit_id) + 1
+    unit_id = assume_present(meter_unit_id)
+    info = runtime.device.meters[unit_id]
+    # The configured order, not the order the present meters happen to be in.
+    position = runtime.device.meter_unit_ids.index(unit_id) + 1
     return DeviceInfo(
-        identifiers={(DOMAIN, f"{key}_meter_{meter_unit_id}")},
+        identifiers={(DOMAIN, f"{key}_meter_{unit_id}")},
         name=f"Fronius {info.identity.model} Meter {position}",
         manufacturer=info.identity.manufacturer,
         model=info.identity.model,
@@ -1572,16 +1649,25 @@ def device_info(
     )
 
 
-class FroniusEntity(CoordinatorEntity):
+class FroniusEntity(
+    CoordinatorEntity[FroniusModbusCoordinator | FroniusWebCoordinator]
+):
     """The entity every platform builds: a description read against the runtime."""
 
     _attr_has_entity_name = True
 
     def __init__(
-        self, runtime: FroniusRuntimeData, entry: FroniusConfigEntry, description
+        self,
+        runtime: FroniusRuntimeData,
+        entry: FroniusConfigEntry,
+        description: FroniusDescription,
     ) -> None:
         """Bind to the coordinator the description's source picks."""
-        coordinator = runtime.modbus if description.source == "modbus" else runtime.web
+        coordinator = (
+            runtime.modbus
+            if description.source == "modbus"
+            else assume_present(runtime.web)
+        )
         super().__init__(coordinator)
         self._runtime = runtime
         self.entity_description = description
@@ -1596,7 +1682,9 @@ class FroniusEntity(CoordinatorEntity):
     @property
     def available(self) -> bool:
         """Whether the report backing this entity was refreshed, and available_fn agrees."""
-        description = self.entity_description
+        # Home Assistant types the attribute as a plain EntityDescription, and
+        # a narrower annotation here collides with the platform base classes.
+        description = cast(FroniusDescription, self.entity_description)
         if description.source == "modbus":
             coordinator = self._runtime.modbus
             if not coordinator.last_update_success:
@@ -1607,8 +1695,8 @@ class FroniusEntity(CoordinatorEntity):
             ):
                 return False
             return description.available_fn(self._runtime)
-        coordinator = self._runtime.web
-        if coordinator is None or not coordinator.last_update_success:
+        web_coordinator = self._runtime.web
+        if web_coordinator is None or not web_coordinator.last_update_success:
             return False
         return description.available_fn(self._runtime)
 
@@ -1626,7 +1714,10 @@ class FroniusTotalSensor(FroniusEntity, RestoreSensor):
     """A monotonically-increasing sensor: always available, restores across restarts."""
 
     def __init__(
-        self, runtime: FroniusRuntimeData, entry: FroniusConfigEntry, description
+        self,
+        runtime: FroniusRuntimeData,
+        entry: FroniusConfigEntry,
+        description: FroniusDescription,
     ) -> None:
         """Track the last accepted value alongside the base entity's state."""
         super().__init__(runtime, entry, description)
@@ -1638,7 +1729,7 @@ class FroniusTotalSensor(FroniusEntity, RestoreSensor):
         await super().async_added_to_hass()
         last_data = await self.async_get_last_sensor_data()
         if last_data is not None:
-            self._last_value = last_data.native_value
+            self._last_value = cast(float | None, last_data.native_value)
 
     @property
     def available(self) -> bool:
@@ -1648,7 +1739,8 @@ class FroniusTotalSensor(FroniusEntity, RestoreSensor):
     @property
     def native_value(self) -> float | None:
         """The description's value, unless it is missing, lower, or an implausible jump."""
-        new_value = self.entity_description.value_fn(self._runtime)
+        description = cast(FroniusDescription, self.entity_description)
+        new_value: float | None = description.value_fn(self._runtime)
         if new_value is None:
             self._lower_values_seen = 0
             return self._last_value

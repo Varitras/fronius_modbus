@@ -293,7 +293,9 @@ files = [
   "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
   "custom_components/fronius_modbus/fronius_modbus_api/sunspec_models.py",
   "custom_components/fronius_modbus/const.py",
+  "custom_components/fronius_modbus/coordinator.py",
   "custom_components/fronius_modbus/derived.py",
+  "custom_components/fronius_modbus/entities.py",
 ]
 
 # Path tracking rules

@@ -145,6 +145,10 @@ class FroniusInverter:
         self._unit = unit
         self._unit_id = unit_id
         self._meter_units = dict(meter_units)
+        # The configured order, kept apart from `meters`: that one holds only
+        # the meters that answered, so numbering displays off it would renumber
+        # the second meter as soon as the first is unplugged.
+        self.meter_unit_ids: tuple[int, ...] = tuple(self._meter_units)
         self.identity: DeviceIdentity | None = None
         self.three_phase = False
         self.inverter: Inverter | None = None

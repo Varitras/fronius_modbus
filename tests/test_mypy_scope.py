@@ -25,12 +25,6 @@ NOT_TYPE_CHECKED_YET = {
     "__init__.py": _UNTYPED,
     "button.py": _UNTYPED,
     "config_flow.py": _UNTYPED,
-    # Both need None-narrowing that only a logic change can give: the optional
-    # sub-systems (storage, web control, meters) are typed `X | None` and the
-    # table reaches straight through them. Widening the scope means reworking
-    # those call sites, not adding annotations.
-    "coordinator.py": "optional sub-systems reached through without narrowing",
-    "entities.py": "optional sub-systems reached through without narrowing",
     "diagnostics.py": _UNTYPED,
     "froniuswebclient.py": _UNTYPED,
     "migrations.py": _UNTYPED,

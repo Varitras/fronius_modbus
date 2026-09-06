@@ -33,7 +33,9 @@ LINE_LIMIT = 900
 LINE_BUDGETS = {
     # 1665 until the total sensor learned to follow a genuine counter reset.
     # 1688 until the reset counter learned to require consecutive lower polls.
-    "entities.py": 1691,
+    # 1691 until the module entered the mypy scope: the narrowing helpers and
+    # the value_fn factories that replaced the loop-bound lambda defaults.
+    "entities.py": 1781,
 }
 
 # SonarSource's own default. Above it, a function is one somebody has to

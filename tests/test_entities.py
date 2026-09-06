@@ -27,12 +27,14 @@ def entry(hass):
     return entry
 
 
-async def make_runtime(hass, entry, connection) -> FroniusRuntimeData:
+async def make_runtime(
+    hass, entry, connection, meter_unit_ids=(METER_UNIT_ID,)
+) -> FroniusRuntimeData:
     """A FroniusRuntimeData built on a fully-refreshed Modbus coordinator."""
     device = FroniusInverter(
         connection.for_unit(INVERTER_UNIT_ID),
         INVERTER_UNIT_ID,
-        {METER_UNIT_ID: connection.for_unit(METER_UNIT_ID)},
+        {unit_id: connection.for_unit(unit_id) for unit_id in meter_unit_ids},
     )
     coordinator = FroniusModbusCoordinator(
         hass,
@@ -219,3 +221,23 @@ async def test_a_total_sensor_reset_needs_consecutive_lower_polls(hass, entry, r
     for _ in range(entities.TOTAL_INCREASING_RESET_POLLS - 1):
         assert other_sensor.native_value == 33187794.59
     assert other_sensor.native_value == 120.0
+
+
+async def test_an_absent_first_meter_does_not_renumber_the_second(
+    hass, entry, connection
+):
+    """A meter that is unplugged must not move the next one's display position.
+
+    The position is a label the user sees on the device; deriving it from the
+    meters that answered would rename "Meter 2" to "Meter 1" the moment the
+    first one stops responding.
+    """
+    absent_unit_id = METER_UNIT_ID - 1
+    runtime = await make_runtime(
+        hass, entry, connection, meter_unit_ids=(absent_unit_id, METER_UNIT_ID)
+    )
+    assert list(runtime.device.meters) == [METER_UNIT_ID]
+
+    info = entities.device_info(runtime, entry, "meter", METER_UNIT_ID)
+
+    assert info["name"].endswith("Meter 2")
