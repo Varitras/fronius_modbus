@@ -96,3 +96,21 @@ def test_every_translation_key_is_one_hassfest_accepts():
         if not pattern.match(description.translation_key)
     ]
     assert offenders == []
+
+
+def test_every_state_translation_key_is_one_hassfest_accepts():
+    """hassfest validates the state keys too; the 0.3 states ("Auto", "On grid operating") failed it."""
+    pattern = re.compile(r"^[a-z0-9][a-z0-9-_]*[a-z0-9]$|^[a-z0-9]$")
+    offenders = []
+    for language in ("en", "de"):
+        translations = json.loads(
+            (PACKAGE / "translations" / f"{language}.json").read_text(encoding="utf-8")
+        )["entity"]
+        for platform, entries in translations.items():
+            for translation_key, entry in entries.items():
+                offenders.extend(
+                    (language, platform, translation_key, state)
+                    for state in entry.get("state", {})
+                    if not pattern.match(state)
+                )
+    assert offenders == []
