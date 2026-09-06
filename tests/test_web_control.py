@@ -3,7 +3,11 @@
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.fronius_modbus.const import API_USERNAME, DOMAIN
+from custom_components.fronius_modbus.const import (
+    API_USERNAME,
+    DOMAIN,
+    SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX,
+)
 from custom_components.fronius_modbus.froniuswebclient import FroniusWebAuthError
 from custom_components.fronius_modbus.token_store import async_get_token_store
 from custom_components.fronius_modbus.web_control import FroniusWebControl
@@ -90,7 +94,7 @@ def make_control(hass, **kwargs) -> FroniusWebControl:
         "client": FakeWebClient(),
         "technician_client": None,
         "storage_present": True,
-        "inverter_firmware": "1.38.6-1",
+        "inverter_firmware": lambda: "1.38.6-1",
     }
     control = FroniusWebControl(
         hass,
@@ -245,3 +249,29 @@ async def test_an_auth_failure_disables_the_web_api_and_deletes_the_token(hass):
         issue.domain == DOMAIN and issue.issue_id.endswith(control._entry.entry_id)
         for issue in ir.async_get(hass).issues.values()
     )
+
+
+async def test_a_firmware_update_clears_the_solar_api_warning_on_the_next_refresh(hass):
+    """The firmware is read per sync, so an update must not need a restart to be noticed."""
+
+    class SolarApiOnClient(FakeWebClient):
+        def get_solar_api_config(self):
+            return {"SolarAPIv1Enabled": True}
+
+    firmware = ["1.38.6-1"]
+    control = make_control(
+        hass,
+        client=SolarApiOnClient(),
+        inverter_firmware=lambda: firmware[0],
+    )
+    issue_id = f"{SOLAR_API_LOW_FIRMWARE_ISSUE_ID_PREFIX}{control._entry.entry_id}"
+    try:
+        await control.async_refresh()
+        assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
+
+        firmware[0] = "1.40.7-1"
+        await control.async_refresh()
+    finally:
+        control.shutdown()
+
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None

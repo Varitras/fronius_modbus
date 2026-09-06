@@ -171,7 +171,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: FroniusConfigEntry) -> b
             client=client,
             technician_client=technician_client,
             storage_present=device.storage is not None,
-            inverter_firmware=device.identity.version,
+            inverter_firmware=lambda: (
+                device.identity.version if device.identity else None
+            ),
             on_battery_write=lambda: modbus.tolerate_failures_until(
                 time.monotonic() + BATTERY_WRITE_MODBUS_RECOVERY_SECONDS
             ),
