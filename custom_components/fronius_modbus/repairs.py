@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.repairs import RepairsFlow
+from homeassistant.const import CONF_HOST
 import voluptuous as vol
 from homeassistant.helpers import issue_registry as ir
 
@@ -55,6 +56,11 @@ class FroniusReconfigureRepairFlow(TokenFlowMixin, RepairsFlow):
             return self.async_create_entry(title="", data={})
 
         defaults = entry_defaults(entry)
+        # Home Assistant starts a repair flow by handing the issue's own `data`
+        # to the first step as user_input. That is not a form submission, and
+        # taking it for one skipped straight past the settings form.
+        if user_input is not None and CONF_HOST not in user_input:
+            user_input = None
         return await self._async_handle_settings_step(
             user_input=user_input,
             step_id="init",
