@@ -1,20 +1,37 @@
-[![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/custom-components/hacs)
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 
 # fronius_modbus
-This is a fork from redpomodoro/fronius_modbus, with some merged changes and PRs.
+This is a fork of [callifo/fronius_modbus](https://github.com/callifo/fronius_modbus) (itself derived from redpomodoro/fronius_modbus), rewritten in 1.0 onto Home Assistant's shared Modbus connection and the `modbus-connection` library. Upstream issues fixed here are listed in the CHANGELOG.
 
-Home Assistant custom component for reading data from Fronius GEN24 and Verto inverters, connected smart meters, and battery storage. This integration uses a Modbus-first + authenticated Web API connection model.
+Home Assistant custom component for reading data from Fronius GEN24 and Verto inverters, connected smart meters, and battery storage. Modbus TCP (SunSpec) is the primary source; the authenticated Fronius Web API adds setup assistance and battery controls that are not available over Modbus.
+
+**Requirements:** Home Assistant 2026.9.0 or newer (the integration depends on the built-in `modbus` integration for its connection); Modbus TCP enabled on the inverter (the setup can enable it for you when the customer password is provided).
 
 It can use the authenticated Fronius web API for setup assistance and battery controls that are not available over Modbus.
 
 > [!CAUTION]
-> This is a work in progress project - it is still in early development stage, so there are still breaking changes possible.
+> Version 1.0 is a rewrite of the Modbus layer. It has been verified against a Symo GEN24 10.0 with a BYD Battery-Box Premium HV and a Fronius Smart Meter TS 65A-3; other models should work through SunSpec discovery but are untested here. Breaking changes are listed in the CHANGELOG.
 >
 > This is an unofficial implementation and not supported by Fronius. It might stop working at any point in time.
 > You are using this module (and it's prerequisites/dependencies) at your own risk. Not me neither any of contributors to this or any prerequired/dependency project are responsible for damage in any kind caused by this project or any of its prerequsites/dependencies.
 
 > [!IMPORTANT]
 > Its recommended to keep the inverter up to date, this integration will only be tested on recent firmwares. It is suggested to update your GEN24 inverter firmware to 1.40.0 or higher as issues have been reported in earlier firmwares of the Solar API caused multiple outages on GEN24 inverters. As of Mar 26, this firmware update has limited availability, so other areas might take longer.
+
+## What changed in 1.0
+
+> [!IMPORTANT]
+> Enum states are translation keys now: `Auto` became `auto`, `Charge from Grid` became `charge_from_grid`, `On grid operating` became `on_grid_operating`, `Enabled`/`Disabled` became `enabled`/`disabled`. Update automations and templates that compare against the old texts; see the CHANGELOG for the rule.
+
+- **Minimum Home Assistant version: 2026.9.0.**
+- The integration no longer opens its own Modbus TCP connection. It now asks Home Assistant's built-in `modbus` integration for a unit on a shared connection (`async_get_unit`), so it can coexist with other integrations talking to the same inverter without pymodbus version conflicts.
+- The register map is discovered at runtime via SunSpec model walking (through the `modbus-connection` library) instead of a hand-written pymodbus client and fixed register list: models 1, 101/103, 120, 121, 122, 123, 124, 160, and 201-204 are read from the model chain. Battery storage entities appear if and only if model 124 is present, and smart meter phase count is derived from the meter model id.
+- Per-value plausibility bounds are gone; SunSpec sentinel values and scale factors are decoded by the library instead.
+- The Web API is now polled on its own interval (new option, see below) instead of once per Modbus poll. A slow or unreachable Web API no longer stalls the Modbus poll or blocks the Modbus entities.
+- New option: **"Web API update interval (seconds)"** (default 60), separate from the Modbus poll interval.
+- Diagnostics download (Settings -> Devices -> device -> Download diagnostics) now includes the raw SunSpec register map, with serial numbers redacted.
+- If a firmware update changes the inverter's SunSpec model chain, the integration reloads the config entry automatically.
+- Entity IDs, unique IDs, history/statistics, and existing options are unaffected by this change; storage modes, the AC-limit/power-factor enable pulse, and the battery API controls behave the same as before, with one correction: the grid charge/discharge power entities now scale by their own rate maximum (0.3 wrote them against the opposite one).
 
 # Installation
 
@@ -23,7 +40,7 @@ It can use the authenticated Fronius web API for setup assistance and battery co
 - Go to HACS
 - Click on the 3 dots in the top right corner.
 - Select "Custom repositories"
-- Add the [URL](https://github.com/callifo/fronius_modbus) to the repository.
+- Add the [URL](https://github.com/Varitras/fronius_modbus) to the repository.
 - Select the 'integration' type.
 - Click the "ADD" button.
 
@@ -59,9 +76,6 @@ If an entry has no valid stored Web API token for the configured host, Home Assi
 
 Turn off scheduled (dis)charging in the web UI to avoid unexpected behavior.
 
-> [!IMPORTANT]
-> When using multiple integrations that use pymodbus package it can lead to version conflicts as they will share 1 package in HA. This can be fixed by removing ALL integrations using pymodbus and modbus configuratio.yaml (for the build in integration into HA), rebooting HA and then reinstalling the integrations and the modbus configuration yaml.
-
 # Usage
 
 ### Battery Storage
@@ -70,11 +84,11 @@ If Web API credentials are configured, the integration exposes both Modbus batte
 The only built-in cross-protocol synchronization is the SoC minimum:
 
 - while `Battery API Mode` is `Manual`, writing `SoC Minimum` also writes the API SoC minimum and forces API SOC mode to `manual`
-- `Battery API Mode` is derived from both `HYB_EM_MODE` and `BAT_M0_SOC_MODE`
+- `Battery API Mode` follows `HYB_EM_MODE`; the inverter's `BAT_M0_SOC_MODE` is shown separately and does not affect the mode
 - entering Modbus `Charge from Grid` also enables the Web API `Charge from grid` and `Charge from AC` toggles when Web API is configured
 - turning on the Web API `Charge from grid` switch also enables `Charge from AC`
 - `Target Feed In` is ignored by the inverter when battery charging is unavailable
-- if those two API mode signals disagree, `Battery API Mode` shows empty, `Target Feed In` and `SoC Maximum` are disabled, and the API charge-source switches remain usable
+- `Target Feed In` and `SoC Maximum` are only available while `Battery API Mode` is `Manual`
 
 ### Controls
 
@@ -93,8 +107,8 @@ The only built-in cross-protocol synchronization is the SoC minimum:
 | Battery API Mode | Fronius Web API battery mode: `Auto` or `Manual`.                                                                                                                                                                                                                                                                                                                      |
 | Charge from AC   | Web API toggle for `HYB_BM_CHARGEFROMAC`. This is also auto-enabled when Modbus `Charge from Grid` is selected from the integration. Turning it off disables both charge-source flags.                                                                                                                                                                                 |
 | Charge from grid | Web API toggle for `HYB_EVU_CHARGEFROMGRID`. Turning it on also enables `Charge from AC`. Turning it off only disables the grid flag. This is also auto-enabled when Modbus `Charge from Grid` is selected from the integration.                                                                                                                                       |
-| Target Feed In   | Manual Fronius target feed-in in watts. Positive values target feed-in watts. Negative values target grid consumption watts, and the inverter will target that grid consumption even when PV power is available. This setting is ignored by the inverter when battery charging is unavailable. It is disabled unless `HYB_EM_MODE=1` and `BAT_M0_SOC_MODE=\"manual\"`. |
-| SoC Maximum      | `BAT_M0_SOC_MAX` from the Web API. Only available when `HYB_EM_MODE=1` and `BAT_M0_SOC_MODE=\"manual\"`, and it must not be set below `SoC Minimum`.                                                                                                                                                                                                                   |
+| Target Feed In   | Manual Fronius target feed-in in watts. Positive values target feed-in watts. Negative values target grid consumption watts, and the inverter will target that grid consumption even when PV power is available. This setting is ignored by the inverter when battery charging is unavailable. It is disabled unless `Battery API Mode` is `Manual` (`HYB_EM_MODE=1`). |
+| SoC Maximum      | `BAT_M0_SOC_MAX` from the Web API. Only available while `Battery API Mode` is `Manual` (`HYB_EM_MODE=1`), and it must not be set below `SoC Minimum`.                                                                                                                                                                                                                   |
 
 ### Storage Control Modes
 
@@ -109,7 +123,7 @@ The only built-in cross-protocol synchronization is the SoC minimum:
 | Block discharging             | The storage can only be charged with PV power. Charge limit will be set to maximum power.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | Block charging                | The can only be discharged and won't be charged with PV power. Discharge limit will be set to maximum power.                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
-Note to change the mode first then set controls active in that mode.
+Note to change the mode first then set controls active in that mode. The mode names in this table are the display texts; the entity state and the `select_option` value are the keys `auto`, `pv_charge_limit`, `discharge_limit`, `pv_charge_and_discharge_limit`, `charge_from_grid`, `discharge_to_grid`, `block_discharging`, `block_charging`.
 
 ### Controls used by Modes
 
@@ -137,7 +151,7 @@ Note to change the mode first then set controls active in that mode.
 
 | Entity          | Description                                                                                                              |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Charge Status   | Holding / Charging / Discharging                                                                                         |
+| Charge Status   | `holding` / `charging` / `discharging` (plus `off`, `empty`, `full`, `testing`)                                                                                         |
 | SoC Minimum     | Shared minimum SoC value. When Web API is configured and API mode is manual, this follows the Web API SoC minimum value. |
 | State of Charge | The current battery level                                                                                                |
 
@@ -161,7 +175,7 @@ Note to change the mode first then set controls active in that mode.
 
 | Entity                                       | Description                                                                                                                                                                                                        |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Grid status                                  | Grid status based on meter and interter frequency. If inverter frequency is 53hz it is running in off grid mode and normally in 50hz. When the inverter is sleeping the meter frequency is checked for connection. |
+| Grid status                                  | `on_grid_operating`, `on_grid`, `off_grid_operating` or `off_grid`, based on meter and inverter frequency. If inverter frequency is 53hz it is running in off grid mode and normally in 50hz. When the inverter is sleeping the meter frequency is checked for connection. |
 | Status / Vendor status                       | Standard SunSpec inverter state plus the Fronius vendor-specific state code.                                                                                                                                       |
 | Reference voltage / Reference voltage offset | SunSpec model 121 PCC voltage reference values exposed by the inverter.                                                                                                                                            |
 | Web API Modbus mode / control / SunSpec mode | Authenticated Modbus service diagnostics from `/api/config/modbus`.                                                                                                                                                |
@@ -193,3 +207,11 @@ Inverter
 - https://www.fronius.com/~/downloads/Solar%20Energy/Operating%20Instructions/42,0410,2649.pdf
 - https://github.com/binsentsu/home-assistant-solaredge-modbus/
 - https://github.com/bigramonk/byd_charging
+
+# Development
+
+Development happens against a WSL2 Home Assistant test environment; the integration itself only needs a recent Home Assistant.
+
+- `.github/scripts/check.sh` runs every gate CI also runs: ruff, mypy, pytest with a coverage gate, and a mutation run. Run it (or at least `pytest tests/ -q`) before calling a change done.
+- The default `pytest tests/ -q` run skips the end-to-end tests. Pass `-m ""` to include them.
+- `tests/fixtures/symo_gen24_fw1386.json` is a captured SunSpec register map from a Fronius Symo GEN24 10.0 running firmware 1.38.6-1. To capture a fixture from another inverter/firmware combination: download diagnostics for the integration's device (Settings -> Devices -> device -> Download diagnostics), take the `registers` object (`{unit_id: {space: {address: word}}}`), prepend the SunSpec marker registers (40000/40001, `"SunS"`) and append the end-of-chain header (a model id of `0xFFFF`) if the diagnostics dump doesn't already include them, and blank out the serial number words before committing the fixture.

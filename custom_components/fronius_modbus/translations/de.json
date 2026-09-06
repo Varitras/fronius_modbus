@@ -1,6 +1,6 @@
 {
+  "title": "Fronius Modbus",
   "config": {
-    "title": "Fronius Modbus",
     "step": {
       "user": {
         "title": "Fronius-System einrichten",
@@ -8,6 +8,7 @@
         "data": {
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
+          "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
           "restrict_modbus_to_this_ip": "Modbus auf diese IP beschränken"
         }
       },
@@ -24,6 +25,7 @@
         "data": {
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
+          "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
           "restrict_modbus_to_this_ip": "Modbus auf diese IP beschränken"
         }
       },
@@ -84,62 +86,65 @@
       },
       "power_factor": {
         "name": "Leistungsfaktor"
+      },
+      "export_soft_limit": {
+        "name": "Weiche Einspeisebegrenzung"
       }
     },
     "select": {
       "ext_control_mode": {
         "name": "Speicher-Steuermodus",
         "state": {
-          "Auto": "Automatisch",
-          "PV Charge Limit": "PV-Ladebegrenzung",
-          "Discharge Limit": "Entladebegrenzung",
-          "PV Charge and Discharge Limit": "PV-Lade- und Entladebegrenzung",
-          "Charge from Grid": "Aus dem Netz laden",
-          "Discharge to Grid": "Ins Netz entladen",
-          "Block Discharging": "Entladen sperren",
-          "Block Charging": "Laden sperren"
+          "auto": "Automatisch",
+          "pv_charge_limit": "PV-Ladebegrenzung",
+          "discharge_limit": "Entladebegrenzung",
+          "pv_charge_and_discharge_limit": "PV-Lade- und Entladebegrenzung",
+          "charge_from_grid": "Aus dem Netz laden",
+          "discharge_to_grid": "Ins Netz entladen",
+          "block_discharging": "Entladen sperren",
+          "block_charging": "Laden sperren"
         }
       },
       "api_battery_mode": {
         "name": "Batterie-API-Modus",
         "state": {
-          "Auto": "Automatisch",
-          "Manual": "Manuell"
+          "auto": "Automatisch",
+          "manual": "Manuell"
         }
       },
       "ac_limit_enable": {
         "name": "AC-Begrenzung aktivieren",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
         }
       },
       "power_factor_enable": {
         "name": "Leistungsfaktor-Steuerung",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
         }
       },
-      "Conn": {
+      "connection_control": {
         "name": "Wechselrichterverbindung",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
         }
       }
     },
     "sensor": {
-      "A": {
+      "ac_current": {
         "name": "AC-Strom"
       },
-      "AphA": {
+      "ac_current_l1": {
         "name": "AC-Strom L1"
       },
-      "AphB": {
+      "ac_current_l2": {
         "name": "AC-Strom L2"
       },
-      "AphC": {
+      "ac_current_l3": {
         "name": "AC-Strom L3"
       },
       "acpower": {
@@ -163,48 +168,48 @@
       "pv_connection": {
         "name": "PV-Verbindung",
         "state": {
-          "Disconnected": "Getrennt",
-          "Connected": "Verbunden",
-          "Available": "Bereit",
-          "Operating": "Aktiv"
+          "disconnected": "Getrennt",
+          "connected": "Verbunden",
+          "available": "Bereit",
+          "operating": "Aktiv"
         }
       },
       "ecp_connection": {
         "name": "Netzverbindung",
         "state": {
-          "Disconnected": "Getrennt",
-          "Connected": "Verbunden"
+          "disconnected": "Getrennt",
+          "connected": "Verbunden"
         }
       },
       "status": {
         "name": "Status",
         "state": {
-          "Off": "Aus",
-          "Sleeping": "Schlafmodus",
-          "Starting": "Startvorgang",
-          "Normal": "Normalbetrieb",
-          "Throttled": "Abgeregelt",
-          "Shutdown": "Abgeschaltet",
-          "Fault": "Fehler",
-          "Standby": "Bereit"
+          "off": "Aus",
+          "sleeping": "Schlafmodus",
+          "starting": "Startvorgang",
+          "normal": "Normalbetrieb",
+          "throttled": "Abgeregelt",
+          "shutdown": "Abgeschaltet",
+          "fault": "Fehler",
+          "standby": "Bereit"
         }
       },
       "statusvendor": {
         "name": "Herstellerstatus",
         "state": {
-          "Off": "Aus",
-          "Sleeping": "Schlafmodus",
-          "Starting": "Startvorgang",
-          "Normal": "Normalbetrieb",
-          "Throttled": "Abgeregelt",
-          "Shutdown": "Abgeschaltet",
-          "Fault": "Fehler",
-          "Standby": "Bereit",
-          "No solarnet": "Keine SolarNet-Verbindung",
-          "No inverter communication": "Keine Wechselrichter-Kommunikation",
-          "Overcurrent solarnet": "SolarNet-Überstrom",
-          "Firmware updating": "Firmware-Update läuft",
-          "ACFI event": "ACFI-Auslösung"
+          "off": "Aus",
+          "sleeping": "Schlafmodus",
+          "starting": "Startvorgang",
+          "normal": "Normalbetrieb",
+          "throttled": "Abgeregelt",
+          "shutdown": "Abgeschaltet",
+          "fault": "Fehler",
+          "standby": "Bereit",
+          "no_solarnet": "Keine SolarNet-Verbindung",
+          "no_inverter_communication": "Keine Wechselrichter-Kommunikation",
+          "overcurrent_solarnet": "SolarNet-Überstrom",
+          "firmware_updating": "Firmware-Update läuft",
+          "acfi_event": "ACFI-Auslösung"
         }
       },
       "line_frequency": {
@@ -228,68 +233,68 @@
       "grid_status": {
         "name": "Netzstatus",
         "state": {
-          "Off grid": "Vom Netz getrennt",
-          "Off grid operating": "Inselbetrieb",
-          "On grid": "Am Netz",
-          "On grid operating": "Netzbetrieb aktiv"
+          "off_grid": "Vom Netz getrennt",
+          "off_grid_operating": "Inselbetrieb",
+          "on_grid": "Am Netz",
+          "on_grid_operating": "Netzbetrieb aktiv"
         }
       },
-      "Conn": {
+      "connection_control": {
         "name": "Verbindungssteuerung",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
         }
       },
-      "WMaxLim_Ena": {
+      "power_limit_control": {
         "name": "Leistungsbegrenzung aktiv",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
         }
       },
-      "OutPFSet_Ena": {
+      "power_factor_control": {
         "name": "Fester Leistungsfaktor aktiv",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
         }
       },
-      "VArPct_Ena": {
+      "reactive_power_control": {
         "name": "Blindleistungsbegrenzung aktiv",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
         }
       },
-      "PhVphA": {
+      "ac_voltage_l1_n": {
         "name": "AC-Spannung L1-N"
       },
-      "PhVphB": {
+      "ac_voltage_l2_n": {
         "name": "AC-Spannung L2-N"
       },
-      "PhVphC": {
+      "ac_voltage_l3_n": {
         "name": "AC-Spannung L3-N"
       },
-      "PPV": {
+      "ac_voltage_line_line": {
         "name": "AC-Spannung Leiter-Leiter"
       },
-      "PPVphAB": {
+      "ac_voltage_l1_l2": {
         "name": "AC-Spannung L1-L2"
       },
-      "PPVphBC": {
+      "ac_voltage_l2_l3": {
         "name": "AC-Spannung L2-L3"
       },
-      "PPVphCA": {
+      "ac_voltage_l3_l1": {
         "name": "AC-Spannung L3-L1"
       },
-      "WphA": {
+      "power_l1": {
         "name": "Leistung L1"
       },
-      "WphB": {
+      "power_l2": {
         "name": "Leistung L2"
       },
-      "WphC": {
+      "power_l3": {
         "name": "Leistung L3"
       },
       "unit_id": {
@@ -301,9 +306,9 @@
       "ac_limit_enable": {
         "name": "AC-Leistungsbegrenzung aktiv",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert",
-          "Unknown": "Unbekannt"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert",
+          "unknown": "Unbekannt"
         }
       },
       "isolation_resistance": {
@@ -312,14 +317,17 @@
       "inverter_temperature": {
         "name": "Temperatur"
       },
+      "export_soft_limit": {
+        "name": "Weiche Einspeisebegrenzung"
+      },
       "api_modbus_mode": {
         "name": "Web-API-Modbus-Modus"
       },
       "api_modbus_control": {
         "name": "Web-API-Modbus aktiv",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
         }
       },
       "api_modbus_sunspec_mode": {
@@ -328,8 +336,8 @@
       "api_modbus_restriction": {
         "name": "Web-API-Modbus-IP-Beschränkung",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
         }
       },
       "api_modbus_restriction_ip": {
@@ -338,30 +346,30 @@
       "control_mode": {
         "name": "Interner Speicher-Steuermodus",
         "state": {
-          "Auto": "Automatisch",
-          "Charge": "Ladebetrieb",
-          "Discharge": "Entladebetrieb",
-          "Charge and Discharge": "Lade-/Entladebetrieb",
-          "Normal": "Normal",
-          "Power reduction": "Leistungsreduzierung",
-          "Constant reactive power": "Konstante Blindleistung",
-          "Constant power factor": "Konstanter Leistungsfaktor",
-          "Power reduction,Constant reactive power": "Leistungsreduzierung,Konstante Blindleistung",
-          "Power reduction,Constant power factor": "Leistungsreduzierung,Konstanter Leistungsfaktor",
-          "Constant reactive power,Constant power factor": "Konstante Blindleistung,Konstanter Leistungsfaktor",
-          "Power reduction,Constant reactive power,Constant power factor": "Leistungsreduzierung,Konstante Blindleistung,Konstanter Leistungsfaktor"
+          "auto": "Automatisch",
+          "charge": "Ladebetrieb",
+          "discharge": "Entladebetrieb",
+          "charge_and_discharge": "Lade-/Entladebetrieb",
+          "normal": "Normal",
+          "power_reduction": "Leistungsreduzierung",
+          "constant_reactive_power": "Konstante Blindleistung",
+          "constant_power_factor": "Konstanter Leistungsfaktor",
+          "power_reduction_constant_reactive_power": "Leistungsreduzierung,Konstante Blindleistung",
+          "power_reduction_constant_power_factor": "Leistungsreduzierung,Konstanter Leistungsfaktor",
+          "constant_reactive_power_constant_power_factor": "Konstante Blindleistung,Konstanter Leistungsfaktor",
+          "power_reduction_constant_reactive_power_constant_power_factor": "Leistungsreduzierung,Konstante Blindleistung,Konstanter Leistungsfaktor"
         }
       },
       "charge_status": {
         "name": "Ladestatus",
         "state": {
-          "Off": "Aus",
-          "Empty": "Leer",
-          "Discharging": "Entladen",
-          "Charging": "Laden",
-          "Full": "Voll",
-          "Holding": "Erhaltung",
-          "Testing": "Testbetrieb"
+          "off": "Aus",
+          "empty": "Leer",
+          "discharging": "Entladen",
+          "charging": "Laden",
+          "full": "Voll",
+          "holding": "Erhaltung",
+          "testing": "Testbetrieb"
         }
       },
       "max_charge": {
@@ -394,10 +402,10 @@
       "storage_connection": {
         "name": "Speicherverbindung",
         "state": {
-          "Disconnected": "Getrennt",
-          "Connected": "Verbunden",
-          "Available": "Bereit",
-          "Operating": "Aktiv"
+          "disconnected": "Getrennt",
+          "connected": "Verbunden",
+          "available": "Bereit",
+          "operating": "Aktiv"
         }
       },
       "storage_temperature": {
@@ -412,17 +420,17 @@
       "grid_charging": {
         "name": "Netzladen",
         "state": {
-          "Disabled": "Deaktiviert",
-          "Enabled": "Aktiviert"
+          "disabled": "Deaktiviert",
+          "enabled": "Aktiviert"
         }
       },
-      "WHRtg": {
+      "energy_rating": {
         "name": "Nennkapazität"
       },
-      "MaxChaRte": {
+      "max_charge_rate": {
         "name": "Maximale Ladeleistung"
       },
-      "MaxDisChaRte": {
+      "max_discharge_rate": {
         "name": "Maximale Entladeleistung"
       },
       "soc": {
@@ -479,6 +487,7 @@
             "data": {
               "host": "Host",
               "scan_interval": "Aktualisierungsintervall (Sekunden)",
+              "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
               "restrict_modbus_to_this_ip": "Modbus auf diese IP beschränken"
             }
           },
@@ -556,6 +565,7 @@
         "data": {
           "host": "Host",
           "scan_interval": "Aktualisierungsintervall (Sekunden)",
+          "web_scan_interval": "Web-API-Aktualisierungsintervall (Sekunden)",
           "restrict_modbus_to_this_ip": "Modbus auf diese IP beschränken"
         }
       },

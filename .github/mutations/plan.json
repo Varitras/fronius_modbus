@@ -1,0 +1,128 @@
+[
+  {
+    "label": "storage: auto is derived from mode 0, not from a charge mode",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "    if mode == MODE_AUTO:\n        return ExtendedMode.AUTO\n",
+    "new": "    if mode == MODE_CHARGE:\n        return ExtendedMode.AUTO\n",
+    "tests": "auto_on_the_device_reads_as_auto"
+  },
+  {
+    "label": "storage: blocking discharge is a charge-limit mode",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "    ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT,\n    ExtendedMode.BLOCK_DISCHARGING,\n}",
+    "new": "    ExtendedMode.CHARGE_AND_DISCHARGE_LIMIT,\n}",
+    "tests": "blocking_discharge_still_allows_a_charge_limit"
+  },
+  {
+    "label": "storage: a rate is clamped to the full rate, not to twice it",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "min(FULL_RATE_PCT, watts / maximum_w * FULL_RATE_PCT)",
+    "new": "min(200.0, watts / maximum_w * FULL_RATE_PCT)",
+    "tests": "rate_above_the_maximum_is_clamped"
+  },
+  {
+    "label": "controls: the enable pulse waits before switching back on",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
+    "old": "                await self._sleep(APPLY_TOGGLE_DELAY_SECONDS)\n",
+    "new": "",
+    "tests": "pulsed_off_and_on_around_the_write"
+  },
+  {
+    "label": "controls: a power factor outside -1..1 is refused",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/controls.py",
+    "old": "        if not -1.0 <= value <= 1.0:",
+    "new": "        if not -2.0 <= value <= 2.0:",
+    "tests": "power_factor_outside_the_unit_range_is_refused"
+  },
+  {
+    "label": "device: a dead link propagates instead of failing one report",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "                await self._component(name).async_update()\n            except ModbusConnectionError:\n                raise\n",
+    "new": "                await self._component(name).async_update()\n            except ModbusConnectionError:\n                pass\n",
+    "tests": "link_that_dies_after_setup_still_propagates"
+  },
+  {
+    "label": "device: the PV channels are the ones labelled MPPT",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "PV_LABEL = \"MPPT\"",
+    "new": "PV_LABEL = \"XXXX\"",
+    "tests": "foreign_labelled_module_is_not_a_pv_channel"
+  },
+  {
+    "label": "device: the serial words are removed from the raw diagnostics",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/device.py",
+    "old": "                raw.get(\"holding\", {}).pop(address, None)",
+    "new": "                pass",
+    "tests": "raw_diagnostics_drop_the_serial_number"
+  },
+  {
+    "label": "derived: a negative load while the battery charges hard is unavailable",
+    "path": "custom_components/fronius_modbus/derived.py",
+    "old": "        if candidate < 0 and charging_hard:",
+    "new": "        if False:",
+    "tests": "strong_charging_makes_a_negative_load_unavailable"
+  },
+  {
+    "label": "coordinator: three timeouts recycle the link",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "TIMEOUTS_BEFORE_RECYCLE = 3",
+    "new": "TIMEOUTS_BEFORE_RECYCLE = 300",
+    "tests": "three_timeouts_recycle_the_link"
+  },
+  {
+    "label": "coordinator: failures are tolerated only inside the write window",
+    "path": "custom_components/fronius_modbus/coordinator.py",
+    "old": "if self.data is not None and time.monotonic() < self._tolerate_until:",
+    "new": "if self.data is not None:",
+    "tests": "failures_outside_the_write_window_are_not_tolerated"
+  },
+  {
+    "label": "entities: a total sensor rejects an implausible jump",
+    "path": "custom_components/fronius_modbus/entities.py",
+    "old": "TOTAL_INCREASING_MAX_STEP_WH = 100_000",
+    "new": "TOTAL_INCREASING_MAX_STEP_WH = 10**12",
+    "tests": "total_sensor_ignores_an_implausible_jump"
+  },
+  {
+    "label": "web control: manual mode restores the Modbus reserve, not the web one",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "            soc_min = self.data.soc_min if modbus_reserve is None else modbus_reserve",
+    "new": "            soc_min = self.data.soc_min",
+    "tests": "switching_back_to_manual_keeps_the_modbus_reserve"
+  },
+  {
+    "label": "web control: the battery mode still vetoes on the SoC mode",
+    "path": "custom_components/fronius_modbus/web_control.py",
+    "old": "    if raw_mode == BATTERY_MODE_MANUAL:\n        return BATTERY_MODE_MANUAL\n    if raw_mode == BATTERY_MODE_AUTO:\n        return BATTERY_MODE_AUTO\n    return None",
+    "new": "    if raw_mode == BATTERY_MODE_AUTO:\n        return BATTERY_MODE_MANUAL\n    if raw_mode == BATTERY_MODE_MANUAL:\n        return BATTERY_MODE_AUTO\n    return None",
+    "tests": "auto_mode_with_a_manual_soc_mode_still_reads_as_auto"
+  },
+  {
+    "label": "migrations: stale entities are only kept after a failed poll",
+    "path": "custom_components/fronius_modbus/migrations.py",
+    "old": "    if runtime.modbus.data.report.failed or web_refresh_failed:",
+    "new": "    if True:",
+    "tests": "stale_entity_is_removed_after_a_clean_first_poll"
+  },
+  {
+    "label": "storage: minimum reserve reads back inside the write lock",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            await self._storage.write(\"min_rsv_pct\", float(int(percent)))\n",
+    "new": "            await self._storage.write(\"min_rsv_pct\", float(int(percent)))\n            await self._storage.async_update()\n",
+    "tests": "a_write_succeeds_when_the_read_right_after_it_is_refused"
+  },
+  {
+    "label": "storage: the mode write reads back inside the write lock",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "                await self._storage.write(field_name, rate)\n            self._extended_mode = mode\n",
+    "new": "                await self._storage.write(field_name, rate)\n            await self._storage.async_update()\n            self._extended_mode = mode\n",
+    "tests": "a_mode_write_succeeds_when_the_read_right_after_it_is_refused"
+  },
+  {
+    "label": "storage: a rate write reads back inside the write lock",
+    "path": "custom_components/fronius_modbus/fronius_modbus_api/storage.py",
+    "old": "            await self._storage.write(field_name, percent)\n",
+    "new": "            await self._storage.write(field_name, percent)\n            await self._storage.async_update()\n",
+    "tests": "a_rate_write_succeeds_when_the_read_right_after_it_is_refused"
+  }
+]

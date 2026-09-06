@@ -32,7 +32,7 @@ class FroniusWebAuthError(RuntimeError):
 def _as_int(value: Any, fallback: int) -> int:
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return fallback
 
 
@@ -72,7 +72,7 @@ def _is_power_meter_model(model: str | None) -> bool:
 def _parse_json_object(value: Any) -> dict[str, Any]:
     try:
         parsed = json.loads(value) if isinstance(value, str) else None
-    except (TypeError, ValueError, json.JSONDecodeError):
+    except TypeError, ValueError, json.JSONDecodeError:
         return {}
     return parsed if isinstance(parsed, dict) else {}
 
@@ -83,14 +83,16 @@ def _parse_storage_info(attributes: Any) -> dict[str, str | None]:
 
     nameplate = _parse_json_object(attributes.get("nameplate"))
     return {
-        "manufacturer": _clean_text(nameplate.get("manufacturer")) or _clean_text(attributes.get("manufacturer")),
+        "manufacturer": _clean_text(nameplate.get("manufacturer"))
+        or _clean_text(attributes.get("manufacturer")),
         "model": (
             _clean_text(attributes.get("model"))
             or _clean_text(nameplate.get("model"))
             or _clean_text(attributes.get("DisplayName"))
             or "Battery Storage"
         ),
-        "serial": _clean_text(attributes.get("serial")) or _clean_text(nameplate.get("serial")),
+        "serial": _clean_text(attributes.get("serial"))
+        or _clean_text(nameplate.get("serial")),
     }
 
 
@@ -106,8 +108,12 @@ def _parse_storage_readable(payload: Any) -> dict[str, Any]:
     if not isinstance(device, dict):
         return info
 
-    attributes = device.get("attributes") if isinstance(device.get("attributes"), dict) else None
-    channels = device.get("channels") if isinstance(device.get("channels"), dict) else None
+    attributes = (
+        device.get("attributes") if isinstance(device.get("attributes"), dict) else None
+    )
+    channels = (
+        device.get("channels") if isinstance(device.get("channels"), dict) else None
+    )
 
     info.update(_parse_storage_info(attributes))
     if channels is not None:
@@ -127,7 +133,9 @@ def _parse_inverter_readable(payload: Any) -> dict[str, Any]:
     if not isinstance(device, dict):
         return info
 
-    channels = device.get("channels") if isinstance(device.get("channels"), dict) else None
+    channels = (
+        device.get("channels") if isinstance(device.get("channels"), dict) else None
+    )
     if channels is None:
         return info
 
@@ -175,7 +183,7 @@ def _parse_power_meter_info(
         model = _clean_text(attributes.get("model"))
         try:
             rtu_addr = int(str(attributes.get("addr", "")).strip())
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             continue
 
         if rtu_addr <= 0:
@@ -199,7 +207,9 @@ def _parse_power_meter_info(
     if not meters:
         return result
 
-    meters.sort(key=lambda meter: (not meter["is_primary"], meter["rtu_addr"], meter["unit_id"]))
+    meters.sort(
+        key=lambda meter: (not meter["is_primary"], meter["rtu_addr"], meter["unit_id"])
+    )
     seen: set[int] = set()
     unit_ids: list[int] = []
     for meter in meters:
@@ -232,7 +242,7 @@ def _hash_mode(base_url: str, user: str, timeout: float) -> str:
             .get("digest", {})
             .get(f"{user}HashingVersion")
         )
-    except (requests.RequestException, ValueError):
+    except requests.RequestException, ValueError:
         version = None
     return "md5" if version == 1 else "sha256"
 
@@ -263,7 +273,9 @@ class XHeaderDigestAuth(AuthBase):
         request.register_hook("response", self.handle_401)
         return request
 
-    def handle_401(self, response: requests.Response, **kwargs: object) -> requests.Response:
+    def handle_401(
+        self, response: requests.Response, **kwargs: object
+    ) -> requests.Response:
         if response.status_code != 401 or "Authorization" in response.request.headers:
             return response
 
@@ -362,10 +374,17 @@ def login(
     token: dict[str, str] | None = None,
     timeout: float = 4.0,
 ) -> bool:
-    return _login_response(host, user, password=password, token=token, timeout=timeout)[0].status_code == 200
+    return (
+        _login_response(host, user, password=password, token=token, timeout=timeout)[
+            0
+        ].status_code
+        == 200
+    )
 
 
-def mint_token(host: str, user: str, password: str, timeout: float = 4.0) -> dict[str, str] | None:
+def mint_token(
+    host: str, user: str, password: str, timeout: float = 4.0
+) -> dict[str, str] | None:
     response, auth = _login_response(host, user, password=password, timeout=timeout)
     return auth.saved_token if response.status_code == 200 else None
 
@@ -392,7 +411,9 @@ class FroniusWebClient:
             timeout=self._timeout,
         )
 
-    def _request(self, method: str, path: str, payload: dict | None = None) -> requests.Response:
+    def _request(
+        self, method: str, path: str, payload: dict | None = None
+    ) -> requests.Response:
         response = requests.request(
             method,
             f"http://{self._host}{path}",
@@ -401,7 +422,9 @@ class FroniusWebClient:
             timeout=self._timeout,
         )
         if response.status_code in (401, 403):
-            raise FroniusWebAuthError(f"Fronius Web API auth failed with status {response.status_code}")
+            raise FroniusWebAuthError(
+                f"Fronius Web API auth failed with status {response.status_code}"
+            )
         response.raise_for_status()
         return response
 
@@ -428,10 +451,14 @@ class FroniusWebClient:
                 sock.connect((self._host, 80))
                 client_ip = sock.getsockname()[0]
         except OSError as err:
-            raise ClientIpResolutionError(f"Failed resolving local IP for {self._host}") from err
+            raise ClientIpResolutionError(
+                f"Failed resolving local IP for {self._host}"
+            ) from err
 
         if not client_ip or client_ip.startswith("127."):
-            raise ClientIpResolutionError(f"Invalid local IP resolved for {self._host}: {client_ip!r}")
+            raise ClientIpResolutionError(
+                f"Invalid local IP resolved for {self._host}: {client_ip!r}"
+            )
         return client_ip
 
     def login(self) -> bool:
@@ -457,7 +484,11 @@ class FroniusWebClient:
         except FroniusWebAuthError:
             raise
         except Exception as err:
-            _LOGGER.warning("Failed reading storage identity via web API from %s: %s", self._host, err)
+            _LOGGER.warning(
+                "Failed reading storage identity via web API from %s: %s",
+                self._host,
+                err,
+            )
         return _parse_storage_readable(None)
 
     def get_inverter_info(self) -> dict[str, Any]:
@@ -468,10 +499,16 @@ class FroniusWebClient:
         except FroniusWebAuthError:
             raise
         except Exception as err:
-            _LOGGER.warning("Failed reading inverter readable data via web API from %s: %s", self._host, err)
+            _LOGGER.warning(
+                "Failed reading inverter readable data via web API from %s: %s",
+                self._host,
+                err,
+            )
         return _parse_inverter_readable(None)
 
-    def get_power_meter_info(self, meter_address_offset: int = 200) -> dict[str, Any] | None:
+    def get_power_meter_info(
+        self, meter_address_offset: int = 200
+    ) -> dict[str, Any] | None:
         try:
             data = self._get_public_json("/api/components/PowerMeter/readable")
             meter_info = _parse_power_meter_info(data, meter_address_offset)
@@ -493,7 +530,11 @@ class FroniusWebClient:
             )
             return meter_info
         except Exception as err:
-            _LOGGER.warning("Failed reading power meter config via web API from %s: %s", self._host, err)
+            _LOGGER.warning(
+                "Failed reading power meter config via web API from %s: %s",
+                self._host,
+                err,
+            )
         return None
 
     def ensure_modbus_enabled(
@@ -515,7 +556,8 @@ class FroniusWebClient:
             and _is_enabled(ctr.get("on"))
             and _as_int(slave.get("port"), port) == int(port)
             and _as_int(slave.get("meterAddress"), meter_address) == int(meter_address)
-            and _as_int(slave.get("rtu_inverter_slave_id"), inverter_unit_id) == int(inverter_unit_id)
+            and _as_int(slave.get("rtu_inverter_slave_id"), inverter_unit_id)
+            == int(inverter_unit_id)
             and _is_enabled(current_restriction.get("on")) == restriction_on
             and (not restriction_on or current_restriction.get("ip") == restriction_ip)
         ):
@@ -532,7 +574,10 @@ class FroniusWebClient:
                 "rtu_inverter_slave_id": inverter_unit_id,
                 "ctr": {
                     "on": True,
-                    "restriction": {"on": restriction_on, **({"ip": restriction_ip} if restriction_ip else {})},
+                    "restriction": {
+                        "on": restriction_on,
+                        **({"ip": restriction_ip} if restriction_ip else {}),
+                    },
                 },
             },
         }
@@ -595,7 +640,9 @@ class FroniusWebClient:
         }
         return self._post_ok("/api/config/batteries", payload)
 
-    def set_battery_charge_sources(self, charge_from_grid: bool, charge_from_ac: bool) -> bool:
+    def set_battery_charge_sources(
+        self, charge_from_grid: bool, charge_from_ac: bool
+    ) -> bool:
         payload = {
             "HYB_EVU_CHARGEFROMGRID": bool(charge_from_grid),
             "HYB_BM_CHARGEFROMAC": bool(charge_from_ac),
