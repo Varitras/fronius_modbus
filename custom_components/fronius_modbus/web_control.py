@@ -118,7 +118,7 @@ def _enabled_state(value: Any) -> str:
         is_enabled = normalized in ("1", "true", "on", "yes", "enabled")
     else:
         is_enabled = bool(value)
-    return "Enabled" if is_enabled else "Disabled"
+    return "enabled" if is_enabled else "disabled"
 
 
 def _enabled_bool(value: Any) -> bool:

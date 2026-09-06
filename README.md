@@ -18,6 +18,9 @@ It can use the authenticated Fronius web API for setup assistance and battery co
 
 ## What changed in 1.0
 
+> [!IMPORTANT]
+> Enum states are translation keys now: `Auto` became `auto`, `Charge from Grid` became `charge_from_grid`, `On grid operating` became `on_grid_operating`, `Enabled`/`Disabled` became `enabled`/`disabled`. Update automations and templates that compare against the old texts; see the CHANGELOG for the rule.
+
 - **Minimum Home Assistant version: 2026.9.0.**
 - The integration no longer opens its own Modbus TCP connection. It now asks Home Assistant's built-in `modbus` integration for a unit on a shared connection (`async_get_unit`), so it can coexist with other integrations talking to the same inverter without pymodbus version conflicts.
 - The register map is discovered at runtime via SunSpec model walking (through the `modbus-connection` library) instead of a hand-written pymodbus client and fixed register list: models 1, 101/103, 120, 121, 122, 123, 124, 160, and 201-204 are read from the model chain. Battery storage entities appear if and only if model 124 is present, and smart meter phase count is derived from the meter model id.

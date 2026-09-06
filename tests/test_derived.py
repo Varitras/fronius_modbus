@@ -5,10 +5,10 @@ from custom_components.fronius_modbus.derived import LoadEstimator, grid_status
 
 def test_grid_status_from_both_frequencies():
     """Combine inverter and meter frequency into a grid status."""
-    assert grid_status(50.0, 49.99) == "On grid operating"
-    assert grid_status(50.0, 0.0) == "Off grid operating"
-    assert grid_status(0.0, 50.0) == "On grid"
-    assert grid_status(0.0, 0.0) == "Off grid"
+    assert grid_status(50.0, 49.99) == "on_grid_operating"
+    assert grid_status(50.0, 0.0) == "off_grid_operating"
+    assert grid_status(0.0, 50.0) == "on_grid"
+    assert grid_status(0.0, 0.0) == "off_grid"
     assert grid_status(None, 50.0) is None
 
 

@@ -48,6 +48,7 @@ from .const import (
     SENSOR_STATE_OPTIONS,
     STORAGE_CONTROL_MODE,
     STORAGE_EXT_CONTROL_MODE,
+    UNKNOWN_STATE,
     bitmask_to_string,
     entity_prefix,
     instance_key,
@@ -169,9 +170,9 @@ def _control_status(value: bool | None) -> str | None:
 
 
 def _ac_limit_status(value: bool | None) -> str:
-    """AC_LIMIT_STATUS, with an explicit "Unknown" for a value the controls haven't read yet."""
+    """AC_LIMIT_STATUS, with an explicit UNKNOWN_STATE for a value the controls haven't read yet."""
     if value is None:
-        return "Unknown"
+        return UNKNOWN_STATE
     return AC_LIMIT_STATUS[1] if value else AC_LIMIT_STATUS[0]
 
 
@@ -397,7 +398,7 @@ _STATIC_SENSOR_DESCRIPTIONS: tuple[FroniusSensorDescription, ...] = (
         "events2",
         report_name=REPORT_INVERTER,
         value_fn=lambda r: bitmask_to_string(
-            assume_present(r.device.inverter).evt_vnd2, INVERTER_EVENTS, "None", bits=32
+            assume_present(r.device.inverter).evt_vnd2, INVERTER_EVENTS, "none", bits=32
         ),
         entity_category=EntityCategory.DIAGNOSTIC,
     ),

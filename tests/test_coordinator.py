@@ -46,7 +46,7 @@ async def test_a_poll_yields_report_load_and_grid_status(coordinator):
     poll = await coordinator._async_update_data()
     assert "inverter" in poll.report.updated
     assert poll.load_w == 3105.1  # meter 30 W + inverter 3075.1 W
-    assert poll.grid_status == "On grid operating"
+    assert poll.grid_status == "on_grid_operating"
     assert (
         coordinator.storage_control is not None
         and coordinator.inverter_controls is not None

@@ -207,7 +207,7 @@ async def test_the_select_changes_the_storage_mode(hass, mock_modbus):
         "select_option",
         {
             "entity_id": entity_id_for(hass, entry, "select", "ext_control_mode"),
-            "option": "Charge from Grid",
+            "option": "charge_from_grid",
         },
         blocking=True,
     )

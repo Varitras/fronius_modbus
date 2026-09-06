@@ -3,6 +3,7 @@
 ## 1.0.0
 
 ### Breaking
+- **Enum states are now translation keys.** Every select option and every enumerated sensor state changed from an English display text to a lowercase key (shown translated in the UI): `Auto` → `auto`, `PV Charge Limit` → `pv_charge_limit`, `Charge from Grid` → `charge_from_grid`, `Block Discharging` → `block_discharging`, `Enabled`/`Disabled` → `enabled`/`disabled`, `On grid operating` → `on_grid_operating`, `Off grid` → `off_grid`, `Normal` → `normal`, `Throttled` → `throttled`, `Charge and Discharge` → `charge_and_discharge`, `Power reduction,Constant power factor` → `power_reduction_constant_power_factor`, and so on — the rule is lowercase with every non-alphanumeric run replaced by `_`. Automations, templates and dashboards that compare against the old texts (`is_state(..., "Auto")`, `select_option: "Charge from Grid"`) must use the new keys. An unmapped device code now reads `unknown` instead of `Unknown (<code>)`. Reason: hassfest only validates translation keys of the form `[a-z0-9-_]+`, so the German state texts could not be shipped otherwise.
 
 - Minimum supported Home Assistant version is now 2026.9.0.
 - The integration now requires Home Assistant's built-in `modbus` integration and connects through it via `async_get_unit` instead of opening its own Modbus TCP connection.

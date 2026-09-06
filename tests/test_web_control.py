@@ -119,10 +119,10 @@ async def test_refresh_fills_the_web_data(control):
     assert data.inverter_temperature == 41.5
     assert (data.modbus_mode, data.modbus_control, data.modbus_restriction) == (
         "TCP",
-        "Enabled",
-        "Disabled",
+        "enabled",
+        "disabled",
     )
-    assert data.battery_mode == "Auto" and data.battery_mode_effective == 0
+    assert data.battery_mode == "auto" and data.battery_mode_effective == 0
     assert data.export_soft_limit_w == 7000
     assert data.storage_temperature == 22.0
 
@@ -134,7 +134,7 @@ async def test_auto_mode_with_a_manual_soc_mode_still_reads_as_auto(hass):
     control = make_control(hass, client=client)
     data = await control.async_refresh()
     assert data.battery_mode_effective == 0
-    assert data.battery_mode == "Auto"
+    assert data.battery_mode == "auto"
     assert control.battery_mode_is_manual is False
     control.shutdown()
 

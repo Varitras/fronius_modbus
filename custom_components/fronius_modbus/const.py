@@ -32,134 +32,139 @@ CONF_WEB_SCAN_INTERVAL = "web_scan_interval"
 ATTR_MANUFACTURER = "Fronius"
 SUPPORTED_MANUFACTURERS = ["Fronius"]
 SUPPORTED_MODELS = ["Primo GEN24", "Symo GEN24", "Verto"]
-
+# Every enum state is a translation key (hassfest: [a-z0-9-_]+); an unmapped
+# SunSpec code shows as this key instead of a value the option list lacks.
+UNKNOWN_STATE = "unknown"
 API_BATTERY_MODE = {
-    0: "Auto",
-    1: "Manual",
+    0: "auto",
+    1: "manual",
 }
 
 API_SOC_MODE = {
-    "auto": "Automatic",
-    "manual": "Manual",
+    "auto": "automatic",
+    "manual": "manual",
 }
 
 STORAGE_CONTROL_MODE = {
-    0: "Auto",
-    1: "Charge",
-    2: "Discharge",
-    3: "Charge and Discharge",
+    0: "auto",
+    1: "charge",
+    2: "discharge",
+    3: "charge_and_discharge",
 }
 
 CHARGE_STATUS = {
-    1: "Off",
-    2: "Empty",
-    3: "Discharging",
-    4: "Charging",
-    5: "Full",
-    6: "Holding",
-    7: "Testing",
+    1: "off",
+    2: "empty",
+    3: "discharging",
+    4: "charging",
+    5: "full",
+    6: "holding",
+    7: "testing",
 }
 
 INVERTER_STATUS = {
-    1: "Off",
-    2: "Sleeping",
-    3: "Starting",
-    4: "Normal",
-    5: "Throttled",
-    6: "Shutdown",
-    7: "Fault",
-    8: "Standby",
+    1: "off",
+    2: "sleeping",
+    3: "starting",
+    4: "normal",
+    5: "throttled",
+    6: "shutdown",
+    7: "fault",
+    8: "standby",
 }
 
 INVERTER_CONTROLS = [
-    "Power reduction",
-    "Constant reactive power",
-    "Constant power factor",
+    "power_reduction",
+    "constant_reactive_power",
+    "constant_power_factor",
 ]
 
 INVERTER_EVENTS = [
-    "Error",
-    "Warning",
-    "Info",
+    "error",
+    "warning",
+    "info",
 ]
 
 FRONIUS_INVERTER_STATUS = {
-    1: "Off",
-    2: "Sleeping",
-    3: "Starting",
-    4: "Normal",
-    5: "Throttled",
-    6: "Shutdown",
-    7: "Fault",
-    8: "Standby",
-    9: "No solarnet",
-    10: "No inverter communication",
-    11: "Overcurrent solarnet",
-    12: "Firmware updating",
-    13: "ACFI event",
+    1: "off",
+    2: "sleeping",
+    3: "starting",
+    4: "normal",
+    5: "throttled",
+    6: "shutdown",
+    7: "fault",
+    8: "standby",
+    9: "no_solarnet",
+    10: "no_inverter_communication",
+    11: "overcurrent_solarnet",
+    12: "firmware_updating",
+    13: "acfi_event",
 }
 
 CHARGE_GRID_STATUS = {
-    0: "Disabled",
-    1: "Enabled",
+    0: "disabled",
+    1: "enabled",
 }
 
 GRID_STATUS = {
-    0: "Off grid",
-    1: "Off grid operating",
-    2: "On grid",
-    3: "On grid operating",
+    0: "off_grid",
+    1: "off_grid_operating",
+    2: "on_grid",
+    3: "on_grid_operating",
 }
 
 CONNECTION_STATUS_CONDENSED = {
-    0: "Disconnected",
-    1: "Connected",
-    3: "Available",
-    7: "Operating",
+    0: "disconnected",
+    1: "connected",
+    3: "available",
+    7: "operating",
 }
 
 ECP_CONNECTION_STATUS = {
-    0: "Disconnected",
-    1: "Connected",
+    0: "disconnected",
+    1: "connected",
 }
 
 CONTROL_STATUS = {
-    0: "Disabled",
-    1: "Enabled",
+    0: "disabled",
+    1: "enabled",
 }
 
 AC_LIMIT_STATUS = {
-    0: "Disabled",
-    1: "Enabled",
+    0: "disabled",
+    1: "enabled",
 }
 
 STORAGE_EXT_CONTROL_MODE = {
-    0: "Auto",
-    1: "PV Charge Limit",
-    2: "Discharge Limit",
-    3: "PV Charge and Discharge Limit",
-    4: "Charge from Grid",
-    5: "Discharge to Grid",
-    6: "Block Discharging",
-    7: "Block Charging",
+    0: "auto",
+    1: "pv_charge_limit",
+    2: "discharge_limit",
+    3: "pv_charge_and_discharge_limit",
+    4: "charge_from_grid",
+    5: "discharge_to_grid",
+    6: "block_discharging",
+    7: "block_charging",
 }
 
 
 def _state_values(*mappings: Mapping[int, str]) -> list[str]:
     return list(
-        dict.fromkeys(value for mapping in mappings for value in mapping.values())
+        dict.fromkeys(
+            [value for mapping in mappings for value in mapping.values()]
+            + [UNKNOWN_STATE]
+        )
     )
 
 
 INVERTER_CONTROL_STATE_VALUES = [
-    "Normal",
-    "Power reduction",
-    "Constant reactive power",
-    "Constant power factor",
-    "Power reduction,Constant reactive power",
-    "Power reduction,Constant power factor",
-    "Constant reactive power,Constant power factor",
-    "Power reduction,Constant reactive power,Constant power factor",
+    "normal",
+    "power_reduction",
+    "constant_reactive_power",
+    "constant_power_factor",
+    "power_reduction_constant_reactive_power",
+    "power_reduction_constant_power_factor",
+    "constant_reactive_power_constant_power_factor",
+    "power_reduction_constant_reactive_power_constant_power_factor",
 ]
 
 
@@ -174,7 +179,7 @@ SENSOR_STATE_OPTIONS = {
     "power_limit_control": _state_values(CONTROL_STATUS),
     "power_factor_control": _state_values(CONTROL_STATUS),
     "reactive_power_control": _state_values(CONTROL_STATUS),
-    "ac_limit_enable": _state_values(AC_LIMIT_STATUS, {2: "Unknown"}),
+    "ac_limit_enable": _state_values(AC_LIMIT_STATUS, {2: UNKNOWN_STATE}),
     "control_mode": _state_values(STORAGE_CONTROL_MODE) + INVERTER_CONTROL_STATE_VALUES,
     "charge_status": _state_values(CHARGE_STATUS),
     "grid_charging": _state_values(CHARGE_GRID_STATUS),
@@ -197,16 +202,16 @@ def entity_prefix(entry_id: str) -> str:
 
 
 def map_code(mapping: dict[int, str], code: int | None) -> str | None:
-    """Look up a SunSpec state code, keeping an unmapped one visible instead of hiding it."""
+    """Look up a SunSpec state code; an unmapped one reads as UNKNOWN_STATE."""
     if code is None:
         return None
-    return mapping.get(code, f"Unknown ({code})")
+    return mapping.get(code, UNKNOWN_STATE)
 
 
 def bitmask_to_string(
     bitmask: int | None, names: list[str], default: str, bits: int = 16
 ) -> str | None:
-    """Render a SunSpec bitfield as its comma-joined set flag names."""
+    """Render a SunSpec bitfield as its set flag names joined into one state key."""
     if bitmask is None:
         return None
     set_names = [
@@ -214,4 +219,4 @@ def bitmask_to_string(
         for bit in range(bits)
         if bitmask & (1 << bit)
     ]
-    return ",".join(set_names) if set_names else default
+    return "_".join(set_names) if set_names else default

@@ -150,7 +150,7 @@ async def test_a_negative_discharge_rate_reads_as_charging(inverter_unit):
     """The sensor names what the battery is doing, not which register was written.
 
     A negative discharge rate is how charging from the grid is expressed; showing
-    the raw mode there would say "Discharge" while the battery fills.
+    the raw mode there would say "discharge" while the battery fills.
     """
     inverter_unit.holding[OUT_W_RTE] = -3000 & 0xFFFF
     chain = await scan(inverter_unit, 40000)
